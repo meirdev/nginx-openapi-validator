@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
 #
-# End-to-end test for the nginx OpenAPI validator module using Docker Compose.
+# End-to-end test for the nginx OpenAPI validator module.
 #
 # Usage:
-#   ./example/test.sh
+#   ./example/test.sh                  # builds and runs everything with Docker Compose
+#   OAV_BASE_URL=http://host:port OAV_LOG_CMD='cat /path/access.log' ./example/test.sh
+#                                      # runs the checks against an nginx you started yourself
+#
+# OAV_LOG_CMD is a shell command that prints the nginx access log; it is only
+# needed for the $oav_* variable checks.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PORT=18088
 
 GREEN='\033[0;32m'
@@ -34,38 +38,58 @@ check() {
     fi
 }
 
+check_log() {
+    local description="$1"
+    local pattern="$2"
+    if echo "$LOGS" | grep -q "$pattern"; then
+        echo -e "  ${GREEN}✓${NC} $description"
+        pass=$((pass + 1))
+    else
+        echo -e "  ${RED}✗${NC} $description (pattern '$pattern' not found)"
+        fail=$((fail + 1))
+    fi
+}
+
 echo "=== Nginx OpenAPI Validator - Integration Tests ==="
 echo ""
 
-# Start services
-echo "Starting services with docker compose..."
-cd "$SCRIPT_DIR"
-docker compose up -d --build --wait 2>&1
-
-cleanup() {
-    echo ""
-    echo "Stopping services..."
+if [ -z "${OAV_BASE_URL:-}" ]; then
+    echo "Starting services with docker compose..."
     cd "$SCRIPT_DIR"
-    docker compose down 2>/dev/null || true
-}
-trap cleanup EXIT
+    docker compose up -d --build --wait 2>&1
+
+    cleanup() {
+        echo ""
+        echo "Stopping services..."
+        cd "$SCRIPT_DIR"
+        docker compose down 2>/dev/null || true
+    }
+    trap cleanup EXIT
+
+    BASE="http://localhost:$PORT"
+    OAV_LOG_CMD="docker compose logs nginx 2>&1"
+else
+    BASE="$OAV_BASE_URL"
+fi
 
 # Wait for nginx to be ready
-echo "Waiting for nginx..."
-for i in $(seq 1 10); do
-    if curl -s -o /dev/null http://localhost:$PORT/ 2>/dev/null; then
+echo "Waiting for nginx at $BASE..."
+for i in $(seq 1 20); do
+    if curl -s -o /dev/null "$BASE/" 2>/dev/null; then
         break
     fi
     sleep 0.5
 done
 
-BASE="http://localhost:$PORT"
+JSON='Content-Type: application/json'
 
 # ── Path validation ──────────────────────────────────────────────────
 echo ""
 echo "Path validation:"
 check "Valid path /api/pets passes"          200 "$BASE/api/pets?status=available"
 check "Valid path /api/pets/42 passes"       200 "$BASE/api/pets/42"
+check "Trailing slash is tolerated"          200 "$BASE/api/pets/?status=available"
+check "Percent-encoded path param decodes"   200 "$BASE/api/pets/%34%32"
 check "Unknown path /api/unknown → 404"     404 "$BASE/api/unknown"
 check "Unknown nested path → 404"           404 "$BASE/api/foo/bar"
 
@@ -77,23 +101,43 @@ check "DELETE /api/pets → 405"              405 -X DELETE "$BASE/api/pets"
 check "PATCH /api/pets → 405"               405 -X PATCH "$BASE/api/pets"
 check "DELETE /api/pets/42 is allowed"       200 -X DELETE "$BASE/api/pets/42"
 
+# ── Path parameter validation ────────────────────────────────────────
+echo ""
+echo "Path parameter validation:"
+check "Non-integer petId → 400"             400 "$BASE/api/pets/abc"
+
 # ── Query parameter validation ───────────────────────────────────────
 echo ""
 echo "Query parameter validation:"
 check "Missing required 'status' → 400"    400 "$BASE/api/pets"
 check "Valid status=available passes"        200 "$BASE/api/pets?status=available"
 check "Valid status + limit passes"          200 "$BASE/api/pets?status=sold&limit=10"
+check "Invalid enum value → 400"            400 "$BASE/api/pets?status=lost"
+check "limit above maximum → 400"           400 "$BASE/api/pets?status=sold&limit=500"
+check "Non-integer limit → 400"             400 "$BASE/api/pets?status=sold&limit=ten"
 
 # ── Content-Type validation ──────────────────────────────────────────
-# NOTE: POST body validation requires body reading (not yet implemented).
-# These tests validate content-type checking only.
 echo ""
 echo "Content-Type validation:"
 check "POST with text/plain → 415"          415 -X POST -H "Content-Type: text/plain" -d 'hello' "$BASE/api/pets"
+check "POST without Content-Type → 415"     415 -X POST -H "Content-Type:" -d '{}' "$BASE/api/pets"
 
-# POST with correct content-type returns 400 because body reading is not yet
-# implemented (body is always None, so "required body missing" triggers).
-check "POST with json ct, missing body → 400 (body read not impl)" 400 -X POST -H "Content-Type: application/json" -d '{"name":"Rex","species":"dog"}' "$BASE/api/pets"
+# ── Body validation ──────────────────────────────────────────────────
+echo ""
+echo "Body validation:"
+check "POST valid body passes"               200 -X POST -H "$JSON" -d '{"name":"Rex","species":"dog"}' "$BASE/api/pets"
+check "POST valid body, mixed-case media type passes" 200 -X POST -H "Content-Type: Application/JSON; charset=utf-8" -d '{"name":"Rex","species":"dog"}' "$BASE/api/pets"
+check "POST missing required field → 400"   400 -X POST -H "$JSON" -d '{"name":"Rex"}' "$BASE/api/pets"
+check "POST invalid enum → 400"             400 -X POST -H "$JSON" -d '{"name":"Rex","species":"fish"}' "$BASE/api/pets"
+check "POST malformed JSON → 400"           400 -X POST -H "$JSON" -d '{not json' "$BASE/api/pets"
+check "POST empty body when required → 400" 400 -X POST -H "$JSON" "$BASE/api/pets"
+check "PUT valid body passes"                200 -X PUT -H "$JSON" -d '{"name":"Rex","status":"sold"}' "$BASE/api/pets/42"
+check "PUT invalid field type → 400"        400 -X PUT -H "$JSON" -d '{"name":123}' "$BASE/api/pets/42"
+
+# Larger than client_body_buffer_size on most defaults, forcing nginx to spool
+# the body to a temp file; the module must still read it.
+BIG_BODY=$(python3 -c 'import json; print(json.dumps({"name": "R" * 40000, "species": "dog"}))')
+check "POST large body (temp file) passes"   200 -X POST -H "$JSON" -d "$BIG_BODY" "$BASE/api/pets"
 
 # ── Unvalidated location ─────────────────────────────────────────────
 echo ""
@@ -104,47 +148,18 @@ check "Anything goes on /"                   200 "$BASE/whatever"
 echo ""
 echo "Custom variables (\$oav_status, \$oav_error_count, \$oav_first_error):"
 
-# Send a valid request and an invalid one, then check the access log
-curl -s -o /dev/null http://localhost:$PORT/api/pets?status=available
-curl -s -o /dev/null http://localhost:$PORT/api/pets
+curl -s -o /dev/null "$BASE/api/pets?status=available"
+curl -s -o /dev/null "$BASE/api/pets"
 sleep 0.5
 
-LOGS=$(docker compose logs nginx 2>&1)
-
-# Check that oav_status=valid appears for the successful request
-if echo "$LOGS" | grep -q 'oav_status=valid'; then
-    echo -e "  ${GREEN}✓${NC} \$oav_status=valid appears in access log"
-    pass=$((pass + 1))
+if [ -n "${OAV_LOG_CMD:-}" ]; then
+    LOGS=$(cd "$SCRIPT_DIR" && eval "$OAV_LOG_CMD")
+    check_log "\$oav_status=valid appears in access log"     'oav_status=valid'
+    check_log "\$oav_status=invalid appears in access log"   'oav_status=invalid'
+    check_log "\$oav_error_count > 0 for invalid request"    'oav_errors=[1-9]'
+    check_log "\$oav_first_error contains error detail"      'oav_detail="query\.'
 else
-    echo -e "  ${RED}✗${NC} \$oav_status=valid not found in access log"
-    fail=$((fail + 1))
-fi
-
-# Check that oav_status=invalid appears for the failing request
-if echo "$LOGS" | grep -q 'oav_status=invalid'; then
-    echo -e "  ${GREEN}✓${NC} \$oav_status=invalid appears in access log"
-    pass=$((pass + 1))
-else
-    echo -e "  ${RED}✗${NC} \$oav_status=invalid not found in access log"
-    fail=$((fail + 1))
-fi
-
-# Check that oav_errors count is > 0 for invalid request
-if echo "$LOGS" | grep -q 'oav_errors=[1-9]'; then
-    echo -e "  ${GREEN}✓${NC} \$oav_error_count > 0 for invalid request"
-    pass=$((pass + 1))
-else
-    echo -e "  ${RED}✗${NC} \$oav_error_count not found in access log"
-    fail=$((fail + 1))
-fi
-
-# Check that oav_detail contains error message for invalid request
-if echo "$LOGS" | grep -q 'oav_detail="query\.'; then
-    echo -e "  ${GREEN}✓${NC} \$oav_first_error contains error detail"
-    pass=$((pass + 1))
-else
-    echo -e "  ${RED}✗${NC} \$oav_first_error detail not found in access log"
-    fail=$((fail + 1))
+    echo "  (skipped: OAV_LOG_CMD not set)"
 fi
 
 # ── Results ──────────────────────────────────────────────────────────
@@ -154,12 +169,10 @@ total=$((pass + fail))
 echo -e "Results: ${GREEN}$pass passed${NC}, ${RED}$fail failed${NC} out of $total"
 
 if [ "$fail" -gt 0 ]; then
-    echo ""
-    echo "Nginx logs:"
-    docker compose logs nginx 2>&1 | tail -30
+    if [ -n "${OAV_LOG_CMD:-}" ]; then
+        echo ""
+        echo "Nginx logs:"
+        (cd "$SCRIPT_DIR" && eval "$OAV_LOG_CMD") | tail -30
+    fi
     exit 1
 fi
-
-echo ""
-echo "Sample access log lines:"
-docker compose logs nginx 2>&1 | grep "oav_status=" | tail -5

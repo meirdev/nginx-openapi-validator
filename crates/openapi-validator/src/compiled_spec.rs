@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
-use jsonschema::Validator;
+use jsonschema::{Draft, Validator};
 use matchit::Router;
 use mime::Mime;
+use serde_json::Value;
 
 use crate::content_type::media_type_matches;
 
@@ -41,6 +42,13 @@ pub struct CompiledOperation {
 pub struct CompiledParam {
     pub name: String,
     pub required: bool,
+    /// Whether array values arrive as repeated keys (`a=1&a=2`) rather than
+    /// a single comma-separated value (`a=1,2`). Defaults per OpenAPI: true
+    /// for query and cookie parameters, false for path and header parameters.
+    pub explode: bool,
+    /// The resolved JSON Schema, used to coerce the raw string value into the
+    /// declared type before validation. `None` when the parameter has no schema.
+    pub schema: Option<Value>,
     pub schema_validator: Option<Validator>,
 }
 
@@ -206,20 +214,24 @@ pub fn compile_spec(spec: &oas3::Spec) -> Result<CompiledSpec, SpecError> {
         return Ok(CompiledSpec { router });
     };
 
+    let compiler = SchemaCompiler::new(spec)?;
+
     for (path_template, path_item) in paths {
         // Collect path-level parameters
-        let path_level_params: Vec<oas3::spec::Parameter> = path_item
+        let path_level_params = path_item
             .parameters
             .iter()
-            .filter_map(|p| resolve_param(p, spec))
-            .collect();
+            .map(|p| resolve_param(p, spec))
+            .collect::<Result<Vec<_>, _>>()?;
 
         let mut operations = HashMap::new();
 
         for (method, operation) in path_item.methods() {
             // Merge path-level and operation-level parameters.
             // Operation-level overrides path-level by name+location.
-            let op_params = operation.parameters(spec).unwrap_or_default();
+            let op_params = operation
+                .parameters(spec)
+                .map_err(|e| SpecError::RefResolutionError(e.to_string()))?;
 
             let mut merged_params = path_level_params.clone();
             for op_param in op_params {
@@ -239,7 +251,10 @@ pub fn compile_spec(spec: &oas3::Spec) -> Result<CompiledSpec, SpecError> {
             let mut cookie_params = Vec::new();
 
             for param in &merged_params {
-                let compiled = compile_param(param, spec)?;
+                if is_ignored_header_param(param) {
+                    continue;
+                }
+                let compiled = compile_param(param, &compiler)?;
                 match param.location {
                     oas3::spec::ParameterIn::Path => path_params.push(compiled),
                     oas3::spec::ParameterIn::Query => query_params.push(compiled),
@@ -249,7 +264,7 @@ pub fn compile_spec(spec: &oas3::Spec) -> Result<CompiledSpec, SpecError> {
             }
 
             // Compile request body
-            let request_body = compile_request_body(operation, spec)?;
+            let request_body = compile_request_body(operation, spec, &compiler)?;
 
             operations.insert(
                 method.as_str().to_ascii_uppercase(),
@@ -277,16 +292,33 @@ pub fn compile_spec(spec: &oas3::Spec) -> Result<CompiledSpec, SpecError> {
     Ok(CompiledSpec { router })
 }
 
+/// OpenAPI: header parameters named Accept, Content-Type or Authorization
+/// are ignored; those headers are governed by other parts of the spec.
+fn is_ignored_header_param(param: &oas3::spec::Parameter) -> bool {
+    param.location == oas3::spec::ParameterIn::Header
+        && ["accept", "content-type", "authorization"]
+            .iter()
+            .any(|h| param.name.eq_ignore_ascii_case(h))
+}
+
+const PARAMETER_REF_PREFIX: &str = "#/components/parameters/";
+
 fn resolve_param(
     param_or_ref: &oas3::spec::ObjectOrReference<oas3::spec::Parameter>,
     spec: &oas3::Spec,
-) -> Option<oas3::spec::Parameter> {
+) -> Result<oas3::spec::Parameter, SpecError> {
     match param_or_ref {
-        oas3::spec::ObjectOrReference::Object(p) => Some(p.clone()),
+        oas3::spec::ObjectOrReference::Object(p) => Ok(p.clone()),
         oas3::spec::ObjectOrReference::Ref { ref_path, .. } => {
-            let name = ref_path.rsplit('/').next()?;
-            let components = spec.components.as_ref()?;
-            let resolved = components.parameters.get(name)?;
+            let unresolvable = || SpecError::RefResolutionError(ref_path.clone());
+            let name = ref_path
+                .strip_prefix(PARAMETER_REF_PREFIX)
+                .ok_or_else(unresolvable)?;
+            let resolved = spec
+                .components
+                .as_ref()
+                .and_then(|c| c.parameters.get(name))
+                .ok_or_else(unresolvable)?;
             resolve_param(resolved, spec)
         }
     }
@@ -294,37 +326,84 @@ fn resolve_param(
 
 fn compile_param(
     param: &oas3::spec::Parameter,
-    spec: &oas3::Spec,
+    compiler: &SchemaCompiler,
 ) -> Result<CompiledParam, SpecError> {
-    let schema_validator = match &param.schema {
-        Some(schema) => Some(compile_schema(schema, spec)?),
-        None => None,
+    let (schema, schema_validator) = match &param.schema {
+        Some(schema) => {
+            let (json, validator) = compiler.compile(schema)?;
+            (Some(json), Some(validator))
+        }
+        None => (None, None),
     };
+
+    // OpenAPI default: explode is true for form style (query, cookie) and
+    // false for simple style (path, header).
+    let explode = param.explode.unwrap_or(matches!(
+        param.location,
+        oas3::spec::ParameterIn::Query | oas3::spec::ParameterIn::Cookie
+    ));
 
     Ok(CompiledParam {
         name: param.name.clone(),
         required: param.required.unwrap_or(false),
+        explode,
+        schema,
         schema_validator,
     })
 }
 
-/// Resolve a top-level `$ref` (if any) and compile the schema into a validator.
-fn compile_schema(
-    schema: &oas3::spec::Schema,
-    spec: &oas3::Spec,
-) -> Result<Validator, SpecError> {
-    let resolved = schema
-        .resolve(spec)
-        .map_err(|e| SpecError::RefResolutionError(e.to_string()))?;
-    let schema_json = serde_json::to_value(&resolved)
-        .map_err(|e| SpecError::SchemaCompileError(e.to_string()))?;
-    jsonschema::validator_for(&schema_json)
-        .map_err(|e| SpecError::SchemaCompileError(e.to_string()))
+/// Compiles OpenAPI schemas into JSON Schema validators.
+///
+/// Schemas in an OpenAPI document reference each other through
+/// `#/components/schemas/...` pointers that are relative to the whole document,
+/// not to the schema being compiled. To make those pointers resolvable, the
+/// spec's `components.schemas` are embedded into every compiled schema document
+/// under a `components` key, which JSON Schema treats as an unknown keyword.
+struct SchemaCompiler<'s> {
+    spec: &'s oas3::Spec,
+    components: Option<Value>,
+}
+
+impl<'s> SchemaCompiler<'s> {
+    fn new(spec: &'s oas3::Spec) -> Result<Self, SpecError> {
+        let components = match &spec.components {
+            Some(c) if !c.schemas.is_empty() => {
+                let schemas = serde_json::to_value(&c.schemas)
+                    .map_err(|e| SpecError::SchemaCompileError(e.to_string()))?;
+                Some(serde_json::json!({ "schemas": schemas }))
+            }
+            _ => None,
+        };
+        Ok(Self { spec, components })
+    }
+
+    /// Resolve a top-level `$ref` (if any) and compile the schema.
+    ///
+    /// Returns the resolved schema JSON alongside the validator.
+    fn compile(&self, schema: &oas3::spec::Schema) -> Result<(Value, Validator), SpecError> {
+        let resolved = schema
+            .resolve(self.spec)
+            .map_err(|e| SpecError::RefResolutionError(e.to_string()))?;
+        let schema_json = serde_json::to_value(&resolved)
+            .map_err(|e| SpecError::SchemaCompileError(e.to_string()))?;
+
+        let mut document = schema_json.clone();
+        if let (Value::Object(map), Some(components)) = (&mut document, &self.components) {
+            map.entry("components").or_insert_with(|| components.clone());
+        }
+
+        let validator = jsonschema::options()
+            .with_draft(Draft::Draft202012)
+            .build(&document)
+            .map_err(|e| SpecError::SchemaCompileError(e.to_string()))?;
+        Ok((schema_json, validator))
+    }
 }
 
 fn compile_request_body(
     operation: &oas3::spec::Operation,
     spec: &oas3::Spec,
+    compiler: &SchemaCompiler,
 ) -> Result<Option<CompiledRequestBody>, SpecError> {
     let body = match operation.request_body(spec) {
         Ok(Some(b)) => b,
@@ -343,7 +422,7 @@ fn compile_request_body(
         })?;
 
         let schema_validator = match &media_type.schema {
-            Some(schema) => Some(compile_schema(schema, spec)?),
+            Some(schema) => Some(compiler.compile(schema)?.1),
             None => None,
         };
 
@@ -500,6 +579,50 @@ mod tests {
         let err = m.check_method("DELETE").err().expect("DELETE must be rejected");
         assert_eq!(err.kind, ValidationErrorKind::MethodNotAllowed);
         assert!(err.message.contains("Allowed: GET"));
+    }
+
+    #[test]
+    fn test_nested_component_refs_resolve() {
+        let json = r##"{"openapi": "3.1.0", "info": {"title": "t", "version": "1"},
+          "components": {"schemas": {
+            "Owner": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}},
+            "Pet": {"type": "object", "properties": {"owner": {"$ref": "#/components/schemas/Owner"}}}
+          }},
+          "paths": {"/pets": {"post": {
+            "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Pet"}}}},
+            "responses": {"201": {"description": "ok"}}}}}}"##;
+        let spec = CompiledSpec::from_json(json).expect("nested $ref must compile");
+        let m = spec.match_route("/pets").unwrap();
+        let op = m.check_method("POST").unwrap();
+        let body = op.request_body.as_ref().unwrap();
+        let validator = body.content[0].schema_validator.as_ref().unwrap();
+        assert!(validator.is_valid(&serde_json::json!({"owner": {"name": "x"}})));
+        assert!(!validator.is_valid(&serde_json::json!({"owner": {}})));
+    }
+
+    #[test]
+    fn test_reserved_header_params_are_ignored() {
+        let json = r#"{"openapi": "3.1.0", "info": {"title": "t", "version": "1"}, "paths": {"/x": {"get": {
+            "parameters": [
+                {"name": "Authorization", "in": "header", "required": true, "schema": {"type": "string"}},
+                {"name": "X-Trace", "in": "header", "schema": {"type": "string"}}
+            ],
+            "responses": {"200": {"description": "ok"}}}}}}"#;
+        let spec = CompiledSpec::from_json(json).unwrap();
+        let op = spec.match_route("/x").unwrap().check_method("GET").unwrap();
+        let names: Vec<&str> = op.header_params.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, vec!["X-Trace"]);
+    }
+
+    #[test]
+    fn test_unresolvable_path_level_param_ref_is_an_error() {
+        let json = r##"{"openapi": "3.1.0", "info": {"title": "t", "version": "1"}, "paths": {"/x": {
+            "parameters": [{"$ref": "#/components/parameters/Missing"}],
+            "get": {"responses": {"200": {"description": "ok"}}}}}}"##;
+        assert!(matches!(
+            CompiledSpec::from_json(json),
+            Err(SpecError::RefResolutionError(_))
+        ));
     }
 
     #[test]

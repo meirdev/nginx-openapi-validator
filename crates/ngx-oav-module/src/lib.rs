@@ -1,14 +1,21 @@
 use core::ffi::{c_char, c_void};
 use core::ptr;
+use std::cell::{Cell, OnceCell};
+use std::fs::File;
+use std::mem::ManuallyDrop;
+use std::os::unix::fs::FileExt;
+use std::os::unix::io::FromRawFd;
 use std::sync::Arc;
 
-use ngx::core::Status;
+use ngx::core::{NgxStr, Status};
 use ngx::ffi::{
-    NGX_CONF_TAKE1, NGX_HTTP_LOC_CONF, NGX_HTTP_LOC_CONF_OFFSET, NGX_HTTP_MODULE,
-    NGX_HTTP_VAR_NOCACHEABLE, NGX_LOG_EMERG, NGX_LOG_ERR, NGX_LOG_WARN, ngx_array_push,
-    ngx_command_t, ngx_conf_t, ngx_http_add_variable, ngx_http_core_main_conf_t,
+    NGX_CONF_TAKE1, NGX_DONE, NGX_HTTP_LOC_CONF, NGX_HTTP_LOC_CONF_OFFSET, NGX_HTTP_MODULE,
+    NGX_HTTP_SPECIAL_RESPONSE, NGX_HTTP_VAR_NOCACHEABLE, NGX_LOG_EMERG, NGX_LOG_ERR,
+    ngx_array_push, ngx_command_t, ngx_conf_t, ngx_http_add_variable,
+    ngx_http_core_main_conf_t, ngx_http_core_run_phases, ngx_http_finalize_request,
     ngx_http_handler_pt, ngx_http_module_t, ngx_http_phases_NGX_HTTP_ACCESS_PHASE,
-    ngx_int_t, ngx_module_t, ngx_str_t, ngx_uint_t, ngx_variable_value_t,
+    ngx_http_read_client_request_body, ngx_http_request_t, ngx_int_t, ngx_module_t, ngx_str_t,
+    ngx_uint_t, ngx_variable_value_t,
 };
 use ngx::http::{
     self, HTTPStatus, HttpModule, HttpModuleLocationConf, HttpModuleMainConf, MergeConfigError,
@@ -21,17 +28,32 @@ use ngx::{
 use openapi_validator::compiled_spec::{
     CompiledSpec, EnforcementMode, ValidationConfig, ValidationParts,
 };
-use openapi_validator::error::ValidationResult;
+use openapi_validator::error::{ValidationError, ValidationResult};
+use openapi_validator::RequestData;
 
 // ---------------------------------------------------------------------------
-// Per-request validation context (stored via set_module_ctx)
+// Per-request context
+//
+// Allocated from the request pool (so nginx drops it with the request) and
+// stored via set_module_ctx. It serves two purposes:
+//   * remembering the phase-handler decision across the asynchronous body
+//     read, and
+//   * exposing the outcome to the $oav_* variables.
 // ---------------------------------------------------------------------------
 
-/// Stored in the request context after validation runs.
-/// Variable get-handlers read from this.
 ///
-/// All string fields are pre-computed so the variable getter just returns a pointer.
+/// nginx only ever hands out shared references to module contexts, so the
+/// fields use interior mutability. A request is serviced by one worker
+/// thread, which makes `Cell` and `OnceCell` sufficient.
 struct ValidationContext {
+    /// Value the access handler returns once validation has completed.
+    /// `NGX_DONE` while the request body is still being read.
+    decision: Cell<ngx_int_t>,
+    /// Variable values, empty until validation has run.
+    vars: OnceCell<ValidationVars>,
+}
+
+struct ValidationVars {
     status: &'static str,
     /// Pre-formatted count string (avoids allocation in the variable getter).
     error_count_str: String,
@@ -41,6 +63,15 @@ struct ValidationContext {
 }
 
 impl ValidationContext {
+    fn pending() -> Self {
+        Self {
+            decision: Cell::new(NGX_DONE as ngx_int_t),
+            vars: OnceCell::new(),
+        }
+    }
+}
+
+impl ValidationVars {
     fn valid() -> Self {
         Self {
             status: "valid",
@@ -50,7 +81,7 @@ impl ValidationContext {
         }
     }
 
-    fn invalid(errors: &[openapi_validator::error::ValidationError]) -> Self {
+    fn invalid(errors: &[ValidationError]) -> Self {
         let first_error = errors
             .first()
             .map(|e| format!("{}: {}", e.path, e.message))
@@ -67,6 +98,11 @@ impl ValidationContext {
             })),
         }
     }
+}
+
+/// This module's context for the request, if validation has started.
+fn ctx(request: &http::Request) -> Option<&ValidationContext> {
+    request.get_module_ctx::<ValidationContext>(Module::module())
 }
 
 // ---------------------------------------------------------------------------
@@ -152,15 +188,14 @@ fn oav_variable_get(
     v: *mut ngx_variable_value_t,
     data: usize,
 ) -> Status {
-    let module = Module::module();
-    let ctx = request.get_module_ctx::<ValidationContext>(module);
+    let vars = ctx(request).and_then(|ctx| ctx.vars.get());
 
-    let value: &[u8] = match ctx {
-        Some(ctx) => match data {
-            VAR_STATUS => ctx.status.as_bytes(),
-            VAR_ERROR_COUNT => ctx.error_count_str.as_bytes(),
-            VAR_FIRST_ERROR => ctx.first_error.as_bytes(),
-            VAR_ERRORS_JSON => ctx.errors_json.as_bytes(),
+    let value: &[u8] = match vars {
+        Some(vars) => match data {
+            VAR_STATUS => vars.status.as_bytes(),
+            VAR_ERROR_COUNT => vars.error_count_str.as_bytes(),
+            VAR_FIRST_ERROR => vars.first_error.as_bytes(),
+            VAR_ERRORS_JSON => vars.errors_json.as_bytes(),
             _ => b"-",
         },
         None => b"-",
@@ -178,15 +213,36 @@ fn oav_variable_get(
 
 // ---------------------------------------------------------------------------
 // Location configuration
+//
+// Every setting is optional so that "not set here" can be told apart from an
+// explicit value, and inherited from the enclosing block on merge.
 // ---------------------------------------------------------------------------
 
 #[derive(Default)]
 struct ModuleConfig {
-    enabled: bool,
-    enforcement: EnforcementMode,
-    parts: ValidationParts,
+    enabled: Option<bool>,
+    enforcement: Option<EnforcementMode>,
+    parts: Option<ValidationParts>,
     spec_path: Option<String>,
     compiled_spec: Option<Arc<CompiledSpec>>,
+}
+
+impl ModuleConfig {
+    fn enabled(&self) -> bool {
+        self.enabled.unwrap_or(false)
+    }
+
+    fn enforcement(&self) -> EnforcementMode {
+        self.enforcement.unwrap_or_default()
+    }
+
+    fn validation_config(&self) -> ValidationConfig {
+        ValidationConfig {
+            enabled: self.enabled(),
+            enforcement: self.enforcement(),
+            parts: self.parts.clone().unwrap_or_default(),
+        }
+    }
 }
 
 unsafe impl HttpModuleLocationConf for Module {
@@ -199,11 +255,14 @@ impl http::Merge for ModuleConfig {
             self.spec_path.clone_from(&prev.spec_path);
             self.compiled_spec.clone_from(&prev.compiled_spec);
         }
-        if !self.enabled && prev.enabled {
+        if self.enabled.is_none() {
             self.enabled = prev.enabled;
         }
-        if self.enforcement == EnforcementMode::default() {
+        if self.enforcement.is_none() {
             self.enforcement = prev.enforcement;
+        }
+        if self.parts.is_none() {
+            self.parts.clone_from(&prev.parts);
         }
         Ok(())
     }
@@ -279,6 +338,11 @@ pub static mut ngx_http_oav_module: ngx_module_t = ngx_module_t {
 
 // ---------------------------------------------------------------------------
 // Access phase handler
+//
+// Body handling follows the pattern of nginx's own mirror module: when a body
+// is present, ask nginx to read it, return NGX_DONE, and let the body
+// callback validate and then re-run the phase engine. On re-entry the handler
+// finds the stored decision in the request context and returns it.
 // ---------------------------------------------------------------------------
 
 http_request_handler!(oav_access_handler, oav_handler);
@@ -289,95 +353,209 @@ fn oav_handler(request: &mut http::Request) -> Status {
         None => return Status::NGX_DECLINED,
     };
 
-    if !co.enabled {
+    if !co.enabled() || co.compiled_spec.is_none() {
         return Status::NGX_DECLINED;
     }
 
-    let compiled_spec = match &co.compiled_spec {
-        Some(s) => s,
-        None => return Status::NGX_DECLINED,
-    };
-
-    // Build RequestData from the nginx request.
-    // We allocate one String for the URI and split it; method is a static &str.
-    let method = request.method().as_str().to_string();
-
-    let uri = request
-        .unparsed_uri()
-        .to_str()
-        .unwrap_or("/")
-        .to_string();
-    let (path, query_string) = match uri.find('?') {
-        Some(pos) => (uri[..pos].to_string(), Some(uri[pos + 1..].to_string())),
-        None => (uri, None),
-    };
-
-    // Collect headers — only allocate strings for headers we actually need.
-    let mut headers: Vec<(String, String)> = Vec::with_capacity(8);
-    for (key, value) in request.headers_in_iterator() {
-        if let (Ok(k), Ok(v)) = (key.to_str(), value.to_str()) {
-            headers.push((k.to_string(), v.to_string()));
-        }
+    // Re-entry after the request body has been read.
+    if let Some(ctx) = ctx(request) {
+        return Status(ctx.decision.get());
     }
 
-    // Pass config by reference — avoid cloning ValidationParts.
-    let config = ValidationConfig {
-        enabled: co.enabled,
-        enforcement: co.enforcement,
-        parts: co.parts.clone(),
+    let ctx_ptr = request.pool().allocate(ValidationContext::pending());
+    if ctx_ptr.is_null() {
+        return Status::NGX_ERROR;
+    }
+    request.set_module_ctx(ctx_ptr as *mut c_void, Module::module());
+
+    let r = request.as_mut() as *mut ngx_http_request_t;
+    let has_body = unsafe {
+        (*r).headers_in.content_length_n > 0 || (*r).headers_in.chunked() != 0
     };
 
-    // NOTE: Body validation requires async FFI (ngx_http_read_client_request_body).
-    // For now we validate everything except body content.
-    let req_data = openapi_validator::RequestData {
-        method,
-        path,
-        query_string,
-        headers,
-        body: None,
+    if has_body && co.parts.as_ref().is_none_or(|p| p.body) {
+        let rc = unsafe { ngx_http_read_client_request_body(r, Some(oav_body_handler)) };
+        if rc >= NGX_HTTP_SPECIAL_RESPONSE as ngx_int_t {
+            return Status(rc);
+        }
+        // ngx_http_read_client_request_body took a reference on the request;
+        // release it here. The body callback resumes the phase engine.
+        unsafe { ngx_http_finalize_request(r, NGX_DONE as ngx_int_t) };
+        return Status::NGX_DONE;
+    }
+
+    let decision = validate(request, co, None);
+    if let Some(ctx) = ctx(request) {
+        ctx.decision.set(decision.0);
+    }
+    decision
+}
+
+/// Called by nginx once the whole request body is available.
+unsafe extern "C" fn oav_body_handler(r: *mut ngx_http_request_t) {
+    let request = unsafe { http::Request::from_ngx_http_request(r) };
+
+    let decision = match Module::location_conf(request) {
+        Some(co) => match unsafe { read_request_body(r) } {
+            Ok(body) => validate(request, co, body),
+            Err(()) => {
+                ngx_log_error!(
+                    NGX_LOG_ERR,
+                    request.log(),
+                    "openapi_validate: failed to read request body"
+                );
+                HTTPStatus::INTERNAL_SERVER_ERROR.into()
+            }
+        },
+        None => Status::NGX_DECLINED,
     };
 
+    if let Some(ctx) = ctx(request) {
+        ctx.decision.set(decision.0);
+    }
+
+    unsafe {
+        (*r).set_preserve_body(1);
+        (*r).write_event_handler = Some(ngx_http_core_run_phases);
+        ngx_http_core_run_phases(r);
+    }
+}
+
+/// Collect the buffered request body into one contiguous byte vector.
+///
+/// nginx may keep the body in memory buffers, in a temporary file, or both.
+unsafe fn read_request_body(r: *mut ngx_http_request_t) -> Result<Option<Vec<u8>>, ()> {
+    let rb = (*r).request_body;
+    if rb.is_null() {
+        return Ok(None);
+    }
+
+    let mut out = Vec::new();
+    let mut chain = (*rb).bufs;
+    while !chain.is_null() {
+        let buf = (*chain).buf;
+        if !buf.is_null() {
+            if (*buf).in_file() != 0 {
+                let file = (*buf).file;
+                if file.is_null() {
+                    return Err(());
+                }
+                let len = ((*buf).file_last - (*buf).file_pos) as usize;
+                let start = out.len();
+                out.resize(start + len, 0);
+                // Borrow nginx's descriptor without taking ownership of it.
+                let f = ManuallyDrop::new(File::from_raw_fd((*file).fd));
+                f.read_exact_at(&mut out[start..], (*buf).file_pos as u64)
+                    .map_err(|_| ())?;
+            } else if !(*buf).pos.is_null() {
+                let len = (*buf).last.offset_from((*buf).pos) as usize;
+                out.extend_from_slice(core::slice::from_raw_parts((*buf).pos, len));
+            }
+        }
+        chain = (*chain).next;
+    }
+
+    Ok(if out.is_empty() { None } else { Some(out) })
+}
+
+/// Run validation, record the outcome for the `$oav_*` variables, and turn
+/// it into the phase-handler return value.
+fn validate(request: &mut http::Request, co: &ModuleConfig, body: Option<Vec<u8>>) -> Status {
+    let Some(compiled_spec) = co.compiled_spec.as_ref() else {
+        return Status::NGX_DECLINED;
+    };
+
+    let req_data = build_request_data(request, body);
+    let config = co.validation_config();
     let result = openapi_validator::validate_request(compiled_spec, &req_data, &config);
 
-    // Store validation context for variable access in log_format.
-    // The Box is freed when nginx cleans up the request pool (via module ctx cleanup).
-    let ctx = match &result {
-        ValidationResult::Valid => Box::new(ValidationContext::valid()),
-        ValidationResult::Invalid(errors) => Box::new(ValidationContext::invalid(errors)),
+    let vars = match &result {
+        ValidationResult::Valid => ValidationVars::valid(),
+        ValidationResult::Invalid(errors) => ValidationVars::invalid(errors),
     };
-    request.set_module_ctx(Box::into_raw(ctx) as *mut c_void, Module::module());
+    if let Some(ctx) = ctx(request) {
+        // Ignore the error: a second validation run (e.g. after an internal
+        // redirect re-creates the context) cannot happen on the same context.
+        let _ = ctx.vars.set(vars);
+    }
 
     match result {
         ValidationResult::Valid => Status::NGX_DECLINED,
-        ValidationResult::Invalid(ref errors) => match co.enforcement {
+        ValidationResult::Invalid(ref errors) => match co.enforcement() {
             EnforcementMode::Audit => {
                 for err in errors {
                     ngx_log_error!(
                         NGX_LOG_ERR,
                         request.log(),
                         "openapi_validate [audit]: {} - {}",
-                        err.path,
-                        err.message
+                        sanitize_for_log(&err.path),
+                        sanitize_for_log(&err.message)
                     );
                 }
                 Status::NGX_DECLINED
             }
-            EnforcementMode::Block => {
-                let status_code = result.http_status().unwrap_or(400);
-                match status_code {
-                    404 => HTTPStatus::NOT_FOUND.into(),
-                    405 => HTTPStatus::NOT_ALLOWED.into(),
-                    415 => HTTPStatus::UNSUPPORTED_MEDIA_TYPE.into(),
-                    _ => HTTPStatus::BAD_REQUEST.into(),
-                }
-            }
+            EnforcementMode::Block => match result.http_status().unwrap_or(400) {
+                404 => HTTPStatus::NOT_FOUND.into(),
+                405 => HTTPStatus::NOT_ALLOWED.into(),
+                415 => HTTPStatus::UNSUPPORTED_MEDIA_TYPE.into(),
+                _ => HTTPStatus::BAD_REQUEST.into(),
+            },
         },
     }
+}
+
+/// Build the framework-neutral request view the validator works on.
+///
+/// The path comes from `r->uri`, which nginx has already percent-decoded and
+/// normalized (the same value it used to select this location). The query
+/// string comes from `r->args`, so the validator never sees the raw URI.
+fn build_request_data(request: &http::Request, body: Option<Vec<u8>>) -> RequestData {
+    let raw = request.as_ref();
+
+    let method = request.method().as_str().to_string();
+    let path = request.path().to_string_lossy().into_owned();
+    let query_string = {
+        let args = unsafe { NgxStr::from_ngx_str(raw.args) };
+        if args.is_empty() {
+            None
+        } else {
+            Some(args.to_string_lossy().into_owned())
+        }
+    };
+
+    let mut headers: Vec<(String, String)> = Vec::with_capacity(16);
+    for (key, value) in request.headers_in_iterator() {
+        if let (Ok(k), Ok(v)) = (key.to_str(), value.to_str()) {
+            headers.push((k.to_string(), v.to_string()));
+        }
+    }
+
+    RequestData {
+        method,
+        path,
+        query_string,
+        headers,
+        body,
+    }
+}
+
+/// Strip control characters so client-controlled values cannot inject fake
+/// lines into the error log.
+fn sanitize_for_log(s: &str) -> String {
+    s.chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
 // Command handlers
 // ---------------------------------------------------------------------------
+
+/// Read the single argument of a `TAKE1` directive as UTF-8.
+unsafe fn directive_arg<'a>(cf: *mut ngx_conf_t) -> Option<&'a str> {
+    let args: &[ngx_str_t] = (*(*cf).args).as_slice();
+    args.get(1).and_then(|a| a.to_str().ok())
+}
 
 extern "C" fn cmd_set_enable(
     cf: *mut ngx_conf_t,
@@ -386,27 +564,17 @@ extern "C" fn cmd_set_enable(
 ) -> *mut c_char {
     unsafe {
         let conf = &mut *(conf as *mut ModuleConfig);
-        let args: &[ngx_str_t] = (*(*cf).args).as_slice();
-
-        let val = match args[1].to_str() {
-            Ok(s) => s,
-            Err(_) => {
-                ngx_conf_log_error!(NGX_LOG_EMERG, cf, "openapi_validate: invalid utf-8");
+        match directive_arg(cf) {
+            Some(v) if v.eq_ignore_ascii_case("on") => conf.enabled = Some(true),
+            Some(v) if v.eq_ignore_ascii_case("off") => conf.enabled = Some(false),
+            _ => {
+                ngx_conf_log_error!(
+                    NGX_LOG_EMERG,
+                    cf,
+                    "openapi_validate: expected 'on' or 'off'"
+                );
                 return ngx::core::NGX_CONF_ERROR;
             }
-        };
-
-        if val.eq_ignore_ascii_case("on") {
-            conf.enabled = true;
-        } else if val.eq_ignore_ascii_case("off") {
-            conf.enabled = false;
-        } else {
-            ngx_conf_log_error!(
-                NGX_LOG_EMERG,
-                cf,
-                "openapi_validate: expected 'on' or 'off'"
-            );
-            return ngx::core::NGX_CONF_ERROR;
         }
     }
     ngx::core::NGX_CONF_OK
@@ -419,14 +587,19 @@ extern "C" fn cmd_set_spec(
 ) -> *mut c_char {
     unsafe {
         let conf = &mut *(conf as *mut ModuleConfig);
-        let args: &[ngx_str_t] = (*(*cf).args).as_slice();
 
-        let path = match args[1].to_str() {
-            Ok(s) => s.to_string(),
-            Err(_) => {
-                ngx_conf_log_error!(NGX_LOG_EMERG, cf, "openapi_spec: invalid utf-8 in path");
-                return ngx::core::NGX_CONF_ERROR;
-            }
+        let Some(arg) = directive_arg(cf) else {
+            ngx_conf_log_error!(NGX_LOG_EMERG, cf, "openapi_spec: invalid utf-8 in path");
+            return ngx::core::NGX_CONF_ERROR;
+        };
+
+        // Relative paths are resolved against the nginx prefix, like other
+        // file directives.
+        let path = if arg.starts_with('/') {
+            arg.to_string()
+        } else {
+            let prefix = NgxStr::from_ngx_str((*(*cf).cycle).prefix).to_string_lossy();
+            format!("{prefix}{arg}")
         };
 
         // Parse and compile the spec at config time
@@ -471,31 +644,21 @@ extern "C" fn cmd_set_mode(
 ) -> *mut c_char {
     unsafe {
         let conf = &mut *(conf as *mut ModuleConfig);
-        let args: &[ngx_str_t] = (*(*cf).args).as_slice();
-
-        let val = match args[1].to_str() {
-            Ok(s) => s,
-            Err(_) => {
+        match directive_arg(cf) {
+            Some(v) if v.eq_ignore_ascii_case("block") => {
+                conf.enforcement = Some(EnforcementMode::Block)
+            }
+            Some(v) if v.eq_ignore_ascii_case("audit") => {
+                conf.enforcement = Some(EnforcementMode::Audit)
+            }
+            _ => {
                 ngx_conf_log_error!(
                     NGX_LOG_EMERG,
                     cf,
-                    "openapi_validate_mode: invalid utf-8"
+                    "openapi_validate_mode: expected 'block' or 'audit'"
                 );
                 return ngx::core::NGX_CONF_ERROR;
             }
-        };
-
-        if val.eq_ignore_ascii_case("block") {
-            conf.enforcement = EnforcementMode::Block;
-        } else if val.eq_ignore_ascii_case("audit") {
-            conf.enforcement = EnforcementMode::Audit;
-        } else {
-            ngx_conf_log_error!(
-                NGX_LOG_EMERG,
-                cf,
-                "openapi_validate_mode: expected 'block' or 'audit'"
-            );
-            return ngx::core::NGX_CONF_ERROR;
         }
     }
     ngx::core::NGX_CONF_OK
@@ -508,23 +671,15 @@ extern "C" fn cmd_set_parts(
 ) -> *mut c_char {
     unsafe {
         let conf = &mut *(conf as *mut ModuleConfig);
-        let args: &[ngx_str_t] = (*(*cf).args).as_slice();
 
-        let val = match args[1].to_str() {
-            Ok(s) => s,
-            Err(_) => {
-                ngx_conf_log_error!(
-                    NGX_LOG_EMERG,
-                    cf,
-                    "openapi_validate_parts: invalid utf-8"
-                );
-                return ngx::core::NGX_CONF_ERROR;
-            }
+        let Some(val) = directive_arg(cf) else {
+            ngx_conf_log_error!(NGX_LOG_EMERG, cf, "openapi_validate_parts: invalid utf-8");
+            return ngx::core::NGX_CONF_ERROR;
         };
 
-        // Parse comma-separated list of parts
-        // Reset all parts to false, then enable only what's specified
-        conf.parts = ValidationParts {
+        // Comma-separated list. Everything starts off, then the listed parts
+        // are enabled; "all" enables the default set.
+        let mut parts = ValidationParts {
             path: false,
             method: false,
             path_params: false,
@@ -536,35 +691,33 @@ extern "C" fn cmd_set_parts(
             disallow_additional_query_params: false,
         };
 
-        for part in val.split(',') {
-            let part = part.trim();
-            if part.is_empty() {
-                continue;
-            }
+        for part in val.split(',').map(str::trim).filter(|p| !p.is_empty()) {
             match part.to_ascii_lowercase().as_str() {
-                "path" => conf.parts.path = true,
-                "method" => conf.parts.method = true,
-                "path_params" => conf.parts.path_params = true,
-                "query_params" => conf.parts.query_params = true,
-                "header_params" => conf.parts.header_params = true,
-                "cookie_params" => conf.parts.cookie_params = true,
-                "content_type" => conf.parts.content_type = true,
-                "body" => conf.parts.body = true,
+                "path" => parts.path = true,
+                "method" => parts.method = true,
+                "path_params" => parts.path_params = true,
+                "query_params" => parts.query_params = true,
+                "header_params" => parts.header_params = true,
+                "cookie_params" => parts.cookie_params = true,
+                "content_type" => parts.content_type = true,
+                "body" => parts.body = true,
                 "disallow_additional_query_params" => {
-                    conf.parts.disallow_additional_query_params = true;
+                    parts.disallow_additional_query_params = true;
                 }
-                "all" => {
-                    conf.parts = ValidationParts::default();
-                }
-                _ => {
+                "all" => parts = ValidationParts::default(),
+                other => {
                     ngx_conf_log_error!(
-                        NGX_LOG_WARN,
+                        NGX_LOG_EMERG,
                         cf,
-                        "openapi_validate_parts: unknown part"
+                        "openapi_validate_parts: unknown part '{}'",
+                        other
                     );
+                    return ngx::core::NGX_CONF_ERROR;
                 }
             }
         }
+
+        conf.parts = Some(parts);
     }
     ngx::core::NGX_CONF_OK
 }

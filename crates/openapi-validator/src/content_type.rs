@@ -10,6 +10,12 @@ pub fn parse_media_type(value: &str) -> Option<Mime> {
     value.trim().parse().ok()
 }
 
+/// Whether a media type carries a JSON body: `application/json` or any
+/// `+json` structured suffix such as `application/vnd.api+json`.
+pub fn is_json(media_type: &Mime) -> bool {
+    media_type.subtype() == mime::JSON || media_type.suffix() == Some(mime::JSON)
+}
+
 /// Whether a concrete request media type satisfies a media type from the spec.
 ///
 /// `expected` may be a wildcard such as `*/*` or `application/*`. Type and
@@ -152,6 +158,14 @@ mod tests {
         let errors = check(Some("json"), &["application/json"]);
         assert_eq!(errors.len(), 1);
         assert!(errors[0].message.starts_with("Malformed Content-Type"));
+    }
+
+    #[test]
+    fn test_is_json() {
+        assert!(is_json(&"application/json".parse().unwrap()));
+        assert!(is_json(&"application/vnd.api+json; charset=utf-8".parse().unwrap()));
+        assert!(!is_json(&"text/plain".parse().unwrap()));
+        assert!(!is_json(&"application/x-www-form-urlencoded".parse().unwrap()));
     }
 
     #[test]

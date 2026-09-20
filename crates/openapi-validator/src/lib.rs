@@ -83,6 +83,7 @@ pub fn validate_request(
         param_validator::validate_query_params(
             &query_pairs,
             &operation.query_params,
+            "query",
             &mut errors,
         );
 
@@ -118,6 +119,7 @@ pub fn validate_request(
         param_validator::validate_query_params(
             &cookie_pairs,
             &operation.cookie_params,
+            "cookie",
             &mut errors,
         );
     }
@@ -130,17 +132,25 @@ pub fn validate_request(
         }
 
         if parts.body {
+            let request_media_type = request.content_type().and_then(content_type::parse_media_type);
+
             // Find the matching media type's schema validator
-            let schema_validator = request
-                .content_type()
-                .and_then(content_type::parse_media_type)
-                .and_then(|ct| req_body.find_media_type(&ct))
+            let schema_validator = request_media_type
+                .as_ref()
+                .and_then(|ct| req_body.find_media_type(ct))
                 .and_then(|mt| mt.schema_validator.as_ref());
+
+            // Only JSON bodies can be checked against a JSON Schema. Without a
+            // Content-Type we still try JSON, which is what the schema expects.
+            let parse_as_json = request_media_type
+                .as_ref()
+                .is_none_or(content_type::is_json);
 
             body_validator::validate_body(
                 request.body.as_deref(),
                 req_body.required,
                 schema_validator,
+                parse_as_json,
                 &mut errors,
             );
         }
@@ -343,6 +353,38 @@ mod tests {
         let result = validate_request(&spec, &req, &config);
         assert!(!result.is_valid(), "schema must be enforced when media type differs only by case");
         assert_eq!(result.http_status(), Some(400));
+    }
+
+    #[test]
+    fn test_string_query_param_accepts_numeric_value() {
+        let spec = CompiledSpec::from_json(r#"{"openapi": "3.1.0", "info": {"title": "t", "version": "1"}, "paths": {"/q": {"get": {
+            "parameters": [{"name": "name", "in": "query", "required": true, "schema": {"type": "string"}}],
+            "responses": {"200": {"description": "ok"}}}}}}"#).unwrap();
+        let config = ValidationConfig::default();
+        let req = RequestData {
+            method: "GET".to_string(),
+            path: "/q".to_string(),
+            query_string: Some("name=123".to_string()),
+            headers: vec![],
+            body: None,
+        };
+        assert!(validate_request(&spec, &req, &config).is_valid());
+    }
+
+    #[test]
+    fn test_form_body_is_not_parsed_as_json() {
+        let spec = CompiledSpec::from_json(r#"{"openapi": "3.1.0", "info": {"title": "t", "version": "1"}, "paths": {"/f": {"post": {
+            "requestBody": {"required": true, "content": {"application/x-www-form-urlencoded": {"schema": {"type": "object"}}}},
+            "responses": {"200": {"description": "ok"}}}}}}"#).unwrap();
+        let config = ValidationConfig::default();
+        let req = RequestData {
+            method: "POST".to_string(),
+            path: "/f".to_string(),
+            query_string: None,
+            headers: vec![("Content-Type".to_string(), "application/x-www-form-urlencoded".to_string())],
+            body: Some(b"a=1&b=2".to_vec()),
+        };
+        assert!(validate_request(&spec, &req, &config).is_valid());
     }
 
     #[test]
