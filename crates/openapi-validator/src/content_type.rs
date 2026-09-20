@@ -1,5 +1,6 @@
 use mime::Mime;
 
+use crate::body_validator::BodyKind;
 use crate::error::{ValidationError, ValidationErrorKind};
 
 /// Parse a `Content-Type` header value or a spec media type into a [`Mime`].
@@ -14,6 +15,27 @@ pub fn parse_media_type(value: &str) -> Option<Mime> {
 /// `+json` structured suffix such as `application/vnd.api+json`.
 pub fn is_json(media_type: &Mime) -> bool {
     media_type.subtype() == mime::JSON || media_type.suffix() == Some(mime::JSON)
+}
+
+/// Whether a media type carries an XML body: `application/xml`, `text/xml`
+/// or any `+xml` structured suffix such as `application/soap+xml`.
+pub fn is_xml(media_type: &Mime) -> bool {
+    media_type.subtype() == mime::XML || media_type.suffix() == Some(mime::XML)
+}
+
+/// How the body of a request with this media type should be decoded.
+pub fn body_kind(media_type: &Mime) -> BodyKind {
+    if is_json(media_type) {
+        BodyKind::Json
+    } else if is_xml(media_type) {
+        BodyKind::Xml
+    } else if media_type.type_() == mime::APPLICATION
+        && media_type.subtype() == mime::WWW_FORM_URLENCODED
+    {
+        BodyKind::Form
+    } else {
+        BodyKind::Opaque
+    }
 }
 
 /// Whether a concrete request media type satisfies a media type from the spec.
@@ -166,6 +188,19 @@ mod tests {
         assert!(is_json(&"application/vnd.api+json; charset=utf-8".parse().unwrap()));
         assert!(!is_json(&"text/plain".parse().unwrap()));
         assert!(!is_json(&"application/x-www-form-urlencoded".parse().unwrap()));
+    }
+
+    #[test]
+    fn test_body_kind() {
+        let kind = |s: &str| body_kind(&s.parse().unwrap());
+        assert_eq!(kind("application/json"), BodyKind::Json);
+        assert_eq!(kind("application/vnd.api+json"), BodyKind::Json);
+        assert_eq!(kind("application/xml"), BodyKind::Xml);
+        assert_eq!(kind("text/xml"), BodyKind::Xml);
+        assert_eq!(kind("application/soap+xml"), BodyKind::Xml);
+        assert_eq!(kind("application/x-www-form-urlencoded"), BodyKind::Form);
+        assert_eq!(kind("multipart/form-data"), BodyKind::Opaque);
+        assert_eq!(kind("text/plain"), BodyKind::Opaque);
     }
 
     #[test]

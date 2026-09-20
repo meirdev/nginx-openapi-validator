@@ -1,5 +1,6 @@
 use serde_json::Value;
 
+use crate::coerce;
 use crate::compiled_spec::CompiledParam;
 use crate::error::{ValidationError, ValidationErrorKind};
 
@@ -18,11 +19,12 @@ pub fn parse_query_string(query: &str) -> Vec<(String, String)> {
 pub fn validate_path_params(
     captured: &[(&str, &str)],
     compiled_params: &[CompiledParam],
+    root: &Value,
     errors: &mut Vec<ValidationError>,
 ) {
     for param in compiled_params {
         let value = captured.iter().find(|(name, _)| *name == param.name);
-        validate_single(value.map(|(_, v)| *v), param, "path", errors);
+        validate_single(value.map(|(_, v)| *v), param, "path", root, errors);
     }
 }
 
@@ -34,6 +36,7 @@ pub fn validate_query_params(
     query_pairs: &[(String, String)],
     compiled_params: &[CompiledParam],
     location: &str,
+    root: &Value,
     errors: &mut Vec<ValidationError>,
 ) {
     for param in compiled_params {
@@ -48,16 +51,16 @@ pub fn validate_query_params(
             continue;
         }
 
-        if is_array_param(param) {
+        if is_array_param(param, root) {
             let items: Vec<&str> = if param.explode {
                 values
             } else {
                 values[0].split(',').collect()
             };
-            validate_value(coerce_array(&items, param), param, location, errors);
+            validate_value(coerce_array(&items, param, root), param, location, errors);
         } else {
             for val in values {
-                validate_value(coerce_scalar(val, param), param, location, errors);
+                validate_value(coerce_scalar(val, param, root), param, location, errors);
             }
         }
     }
@@ -67,6 +70,7 @@ pub fn validate_query_params(
 pub fn validate_header_params(
     headers: &[(String, String)],
     compiled_params: &[CompiledParam],
+    root: &Value,
     errors: &mut Vec<ValidationError>,
 ) {
     for param in compiled_params {
@@ -74,7 +78,7 @@ pub fn validate_header_params(
             .iter()
             .find(|(k, _)| k.eq_ignore_ascii_case(&param.name))
             .map(|(_, v)| v.as_str());
-        validate_single(value, param, "header", errors);
+        validate_single(value, param, "header", root, errors);
     }
 }
 
@@ -84,6 +88,7 @@ fn validate_single(
     value: Option<&str>,
     param: &CompiledParam,
     location: &str,
+    root: &Value,
     errors: &mut Vec<ValidationError>,
 ) {
     let Some(raw) = value else {
@@ -91,11 +96,11 @@ fn validate_single(
         return;
     };
 
-    let json_value = if is_array_param(param) {
+    let json_value = if is_array_param(param, root) {
         let items: Vec<&str> = raw.split(',').collect();
-        coerce_array(&items, param)
+        coerce_array(&items, param, root)
     } else {
-        coerce_scalar(raw, param)
+        coerce_scalar(raw, param, root)
     };
     validate_value(json_value, param, location, errors);
 }
@@ -139,87 +144,25 @@ fn validate_value(
 }
 
 // ---------------------------------------------------------------------------
-// Type coercion
-//
-// Parameters arrive as strings. JSON Schema validation needs typed values, so
-// the raw string is converted according to the schema's declared `type`.
-// A `type: string` parameter is never reinterpreted, so values like `123`,
-// `true` or `null` stay strings.
+// Type coercion (see `coerce` for the rules)
 // ---------------------------------------------------------------------------
 
-/// The declared `type` of a schema as a list (`type` may be a string or an array).
-fn schema_types(schema: Option<&Value>) -> Vec<&str> {
-    match schema.and_then(|s| s.get("type")) {
-        Some(Value::String(t)) => vec![t.as_str()],
-        Some(Value::Array(ts)) => ts.iter().filter_map(Value::as_str).collect(),
-        _ => Vec::new(),
-    }
+fn is_array_param(param: &CompiledParam, root: &Value) -> bool {
+    coerce::is_array_schema(root, param.schema.as_ref())
 }
 
-fn is_array_param(param: &CompiledParam) -> bool {
-    schema_types(param.schema.as_ref()).contains(&"array")
+fn coerce_scalar(raw: &str, param: &CompiledParam, root: &Value) -> Value {
+    coerce::coerce(raw, root, param.schema.as_ref())
 }
 
-fn coerce_scalar(raw: &str, param: &CompiledParam) -> Value {
-    coerce_with_schema(raw, param.schema.as_ref())
-}
-
-fn coerce_array(items: &[&str], param: &CompiledParam) -> Value {
-    let items_schema = param.schema.as_ref().and_then(|s| s.get("items"));
+fn coerce_array(items: &[&str], param: &CompiledParam, root: &Value) -> Value {
+    let items_schema = coerce::items_schema(root, param.schema.as_ref());
     Value::Array(
         items
             .iter()
-            .map(|item| coerce_with_schema(item, items_schema))
+            .map(|item| coerce::coerce(item, root, items_schema))
             .collect(),
     )
-}
-
-/// Convert a raw string into the JSON value the schema expects.
-///
-/// When several types are allowed, the most specific parse that succeeds wins.
-/// Without a declared type the value is parsed as JSON when possible, falling
-/// back to a string.
-fn coerce_with_schema(raw: &str, schema: Option<&Value>) -> Value {
-    let types = schema_types(schema);
-    if types.is_empty() {
-        return serde_json::from_str(raw).unwrap_or_else(|_| Value::String(raw.to_string()));
-    }
-
-    if types.contains(&"integer") {
-        if let Ok(i) = raw.parse::<i64>() {
-            return Value::from(i);
-        }
-        if let Ok(u) = raw.parse::<u64>() {
-            return Value::from(u);
-        }
-    }
-    if types.contains(&"number") {
-        if let Some(n) = raw.parse::<f64>().ok().and_then(serde_json::Number::from_f64) {
-            return Value::Number(n);
-        }
-    }
-    if types.contains(&"boolean") {
-        match raw {
-            "true" => return Value::Bool(true),
-            "false" => return Value::Bool(false),
-            _ => {}
-        }
-    }
-    if types.contains(&"null") && (raw.is_empty() || raw == "null") {
-        return Value::Null;
-    }
-    if types.contains(&"string") {
-        return Value::String(raw.to_string());
-    }
-    if types.contains(&"object") || types.contains(&"array") {
-        if let Ok(v) = serde_json::from_str::<Value>(raw) {
-            return v;
-        }
-    }
-
-    // Nothing matched: hand the raw string to the validator so it reports
-    // the type mismatch.
-    Value::String(raw.to_string())
 }
 
 #[cfg(test)]
@@ -240,7 +183,7 @@ mod tests {
     fn query_errors(qs: &str, p: &CompiledParam) -> Vec<ValidationError> {
         let pairs = parse_query_string(qs);
         let mut errors = Vec::new();
-        validate_query_params(&pairs, std::slice::from_ref(p), "query", &mut errors);
+        validate_query_params(&pairs, std::slice::from_ref(p), "query", &Value::Null, &mut errors);
         errors
     }
 
@@ -324,9 +267,9 @@ mod tests {
     fn test_path_param_coercion() {
         let p = param(r#"{"type": "integer"}"#, false);
         let mut errors = Vec::new();
-        validate_path_params(&[("p", "42")], std::slice::from_ref(&p), &mut errors);
+        validate_path_params(&[("p", "42")], std::slice::from_ref(&p), &Value::Null, &mut errors);
         assert!(errors.is_empty());
-        validate_path_params(&[("p", "x")], std::slice::from_ref(&p), &mut errors);
+        validate_path_params(&[("p", "x")], std::slice::from_ref(&p), &Value::Null, &mut errors);
         assert_eq!(errors.len(), 1);
     }
 
@@ -337,7 +280,7 @@ mod tests {
         let mut errors = Vec::new();
         let mut p = p;
         p.name = "X-P".to_string();
-        validate_header_params(&headers, std::slice::from_ref(&p), &mut errors);
+        validate_header_params(&headers, std::slice::from_ref(&p), &Value::Null, &mut errors);
         assert!(errors.is_empty());
     }
 }

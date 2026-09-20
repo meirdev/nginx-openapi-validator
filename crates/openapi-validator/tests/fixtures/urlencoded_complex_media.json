@@ -1,0 +1,100 @@
+{
+  "encoding": {
+    "payload": {
+      "contentType": "application/json"
+    },
+    "title": {
+      "allowReserved": true
+    },
+    "pipeArr": {
+      "style": "pipeDelimited"
+    },
+    "spaceArr": {
+      "style": "spaceDelimited"
+    },
+    "unexplodedArr": {
+      "explode": false
+    }
+  },
+  "schema": {
+    "additionalProperties": false,
+    "properties": {
+      "content": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "oneOf": [
+                {
+                  "type": [
+                    "boolean"
+                  ]
+                },
+                {
+                  "type": [
+                    "integer"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "bool": {
+        "type": [
+          "boolean"
+        ],
+        "enum": [
+          false
+        ]
+      },
+      "reserved": {
+        "type": [
+          "string"
+        ]
+      },
+      "title": {
+        "type": [
+          "string"
+        ]
+      },
+      "pipeArr": {
+        "type": "array",
+        "items": {
+          "type": "integer"
+        }
+      },
+      "spaceArr": {
+        "type": "array",
+        "items": {
+          "type": "integer"
+        }
+      },
+      "unexplodedArr": {
+        "type": "array",
+        "items": {
+          "type": "integer"
+        }
+      },
+      "payload": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "hey": {
+            "type": "array",
+            "items": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "required": [
+      "title",
+      "bool"
+    ],
+    "type": "object"
+  }
+}

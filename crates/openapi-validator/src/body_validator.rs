@@ -1,21 +1,32 @@
-use jsonschema::Validator;
+use serde_json::Value;
 
+use crate::compiled_spec::CompiledMediaType;
 use crate::error::{ValidationError, ValidationErrorKind};
+use crate::{form, xml};
+
+/// How a request body is turned into a JSON value for schema validation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BodyKind {
+    Json,
+    Form,
+    Xml,
+    /// A media type this crate cannot decode; only presence is checked.
+    Opaque,
+}
 
 /// Validate a request body.
 ///
-/// The body is parsed and checked against the schema only when `parse_as_json`
-/// is set, i.e. the request's media type is JSON. Other media types are only
-/// checked for presence, since form and multipart bodies have no JSON
-/// representation to validate.
+/// The body is decoded according to `kind` and checked against the matched
+/// media type's schema. Opaque media types are only checked for presence.
 pub fn validate_body(
     body: Option<&[u8]>,
     body_required: bool,
-    schema_validator: Option<&Validator>,
-    parse_as_json: bool,
+    media: Option<&CompiledMediaType>,
+    kind: BodyKind,
+    root: &Value,
     errors: &mut Vec<ValidationError>,
 ) {
-    match body {
+    let raw = match body {
         None | Some(b"") => {
             if body_required {
                 errors.push(ValidationError {
@@ -24,30 +35,39 @@ pub fn validate_body(
                     path: "body".to_string(),
                 });
             }
+            return;
         }
-        Some(_) if !parse_as_json => {}
-        Some(raw) => {
-            let json_value: serde_json::Value = match serde_json::from_slice(raw) {
-                Ok(v) => v,
-                Err(e) => {
-                    errors.push(ValidationError {
-                        kind: ValidationErrorKind::InvalidBody,
-                        message: format!("Failed to parse request body as JSON: {e}"),
-                        path: "body".to_string(),
-                    });
-                    return;
-                }
-            };
+        Some(raw) => raw,
+    };
 
-            if let Some(validator) = schema_validator {
-                for err in validator.iter_errors(&json_value) {
-                    errors.push(ValidationError {
-                        kind: ValidationErrorKind::SchemaValidation,
-                        message: err.to_string(),
-                        path: format!("body{}", err.instance_path()),
-                    });
-                }
-            }
+    let decoded = match kind {
+        BodyKind::Json => serde_json::from_slice::<Value>(raw).map_err(|e| {
+            vec![ValidationError {
+                kind: ValidationErrorKind::InvalidBody,
+                message: format!("Failed to parse request body as JSON: {e}"),
+                path: "body".to_string(),
+            }]
+        }),
+        BodyKind::Form => form::decode(raw, media, root),
+        BodyKind::Xml => xml::decode(raw, media, root),
+        BodyKind::Opaque => return,
+    };
+
+    let value = match decoded {
+        Ok(value) => value,
+        Err(mut decode_errors) => {
+            errors.append(&mut decode_errors);
+            return;
+        }
+    };
+
+    if let Some(validator) = media.and_then(|m| m.schema_validator.as_ref()) {
+        for err in validator.iter_errors(&value) {
+            errors.push(ValidationError {
+                kind: ValidationErrorKind::SchemaValidation,
+                message: err.to_string(),
+                path: format!("body{}", err.instance_path()),
+            });
         }
     }
 }
@@ -55,72 +75,67 @@ pub fn validate_body(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
-    fn make_validator(schema_json: &str) -> Validator {
-        let schema: serde_json::Value = serde_json::from_str(schema_json).unwrap();
-        jsonschema::validator_for(&schema).unwrap()
+    fn media(schema: Value) -> CompiledMediaType {
+        CompiledMediaType {
+            media_type: "application/json".parse().unwrap(),
+            schema_validator: Some(jsonschema::validator_for(&schema).unwrap()),
+            schema: Some(schema),
+            encoding: None,
+        }
+    }
+
+    fn run(body: Option<&[u8]>, required: bool, media: Option<&CompiledMediaType>, kind: BodyKind) -> Vec<ValidationError> {
+        let mut errors = Vec::new();
+        validate_body(body, required, media, kind, &Value::Null, &mut errors);
+        errors
     }
 
     #[test]
     fn test_valid_body() {
-        let validator = make_validator(
-            r#"{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}"#,
-        );
-        let mut errors = Vec::new();
-        validate_body(
-            Some(br#"{"name": "Alice"}"#),
-            true,
-            Some(&validator),
-            true,
-            &mut errors,
-        );
-        assert!(errors.is_empty());
+        let m = media(json!({"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}));
+        assert!(run(Some(br#"{"name": "Alice"}"#), true, Some(&m), BodyKind::Json).is_empty());
     }
 
     #[test]
     fn test_invalid_body_schema() {
-        let validator = make_validator(
-            r#"{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}"#,
-        );
-        let mut errors = Vec::new();
-        validate_body(
-            Some(br#"{"age": 25}"#),
-            true,
-            Some(&validator),
-            true,
-            &mut errors,
-        );
-        assert!(!errors.is_empty());
+        let m = media(json!({"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}));
+        let errors = run(Some(br#"{"age": 25}"#), true, Some(&m), BodyKind::Json);
+        assert_eq!(errors[0].kind, ValidationErrorKind::SchemaValidation);
+        assert_eq!(errors[0].path, "body");
     }
 
     #[test]
     fn test_missing_required_body() {
-        let mut errors = Vec::new();
-        validate_body(None, true, None, true, &mut errors);
+        let errors = run(None, true, None, BodyKind::Json);
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].kind, ValidationErrorKind::MissingRequiredBody);
     }
 
     #[test]
     fn test_missing_optional_body() {
-        let mut errors = Vec::new();
-        validate_body(None, false, None, true, &mut errors);
-        assert!(errors.is_empty());
+        assert!(run(None, false, None, BodyKind::Json).is_empty());
     }
 
     #[test]
-    fn test_non_json_body_is_not_parsed() {
-        let validator = make_validator(r#"{"type": "object"}"#);
-        let mut errors = Vec::new();
-        validate_body(Some(b"a=1&b=2"), true, Some(&validator), false, &mut errors);
-        assert!(errors.is_empty());
+    fn test_opaque_body_is_not_parsed() {
+        let m = media(json!({"type": "object"}));
+        assert!(run(Some(b"\x00\x01binary"), true, Some(&m), BodyKind::Opaque).is_empty());
     }
 
     #[test]
     fn test_invalid_json() {
-        let mut errors = Vec::new();
-        validate_body(Some(b"not json"), true, None, true, &mut errors);
+        let errors = run(Some(b"not json"), true, None, BodyKind::Json);
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].kind, ValidationErrorKind::InvalidBody);
+    }
+
+    #[test]
+    fn test_form_body_is_decoded_and_validated() {
+        let m = media(json!({"type": "object", "required": ["n"], "properties": {"n": {"type": "integer"}}}));
+        assert!(run(Some(b"n=5"), true, Some(&m), BodyKind::Form).is_empty());
+        assert!(!run(Some(b"n=x"), true, Some(&m), BodyKind::Form).is_empty());
+        assert!(!run(Some(b"other=1"), true, Some(&m), BodyKind::Form).is_empty());
     }
 }

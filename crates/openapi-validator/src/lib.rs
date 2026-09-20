@@ -1,8 +1,12 @@
 pub mod body_validator;
+pub mod coerce;
 pub mod compiled_spec;
 pub mod content_type;
+pub mod dialect;
 pub mod error;
+pub mod form;
 pub mod param_validator;
+pub mod xml;
 
 pub use compiled_spec::{CompiledSpec, ValidationConfig, ValidationParts};
 use error::{ValidationError, ValidationErrorKind, ValidationResult};
@@ -64,10 +68,13 @@ pub fn validate_request(
     };
 
     // 3. Path parameter validation
+    let root = spec.document();
+
     if parts.path_params {
         param_validator::validate_path_params(
             &matched.params,
             &operation.path_params,
+            root,
             &mut errors,
         );
     }
@@ -84,6 +91,7 @@ pub fn validate_request(
             &query_pairs,
             &operation.query_params,
             "query",
+            root,
             &mut errors,
         );
 
@@ -109,6 +117,7 @@ pub fn validate_request(
         param_validator::validate_header_params(
             &request.headers,
             &operation.header_params,
+            root,
             &mut errors,
         );
     }
@@ -120,6 +129,7 @@ pub fn validate_request(
             &cookie_pairs,
             &operation.cookie_params,
             "cookie",
+            root,
             &mut errors,
         );
     }
@@ -134,23 +144,23 @@ pub fn validate_request(
         if parts.body {
             let request_media_type = request.content_type().and_then(content_type::parse_media_type);
 
-            // Find the matching media type's schema validator
-            let schema_validator = request_media_type
+            // The declared media type that accepts the request's Content-Type.
+            let media = request_media_type
                 .as_ref()
-                .and_then(|ct| req_body.find_media_type(ct))
-                .and_then(|mt| mt.schema_validator.as_ref());
+                .and_then(|ct| req_body.find_media_type(ct));
 
-            // Only JSON bodies can be checked against a JSON Schema. Without a
-            // Content-Type we still try JSON, which is what the schema expects.
-            let parse_as_json = request_media_type
+            // Without a Content-Type, JSON is assumed since that is what the
+            // schema describes.
+            let kind = request_media_type
                 .as_ref()
-                .is_none_or(content_type::is_json);
+                .map_or(body_validator::BodyKind::Json, content_type::body_kind);
 
             body_validator::validate_body(
                 request.body.as_deref(),
                 req_body.required,
-                schema_validator,
-                parse_as_json,
+                media,
+                kind,
+                root,
                 &mut errors,
             );
         }

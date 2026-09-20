@@ -1,24 +1,34 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
-use jsonschema::{Draft, Validator};
+use jsonschema::{Draft, Registry, Validator};
 use matchit::Router;
 use mime::Mime;
-use serde_json::Value;
+use serde_json::{json, Value};
 
+use crate::coerce::resolve_pointer;
 use crate::content_type::media_type_matches;
-
+use crate::dialect;
 use crate::error::{SpecError, ValidationError, ValidationErrorKind};
+
+/// URI under which the OpenAPI document is registered with the schema
+/// engine, so every `#/components/...` reference resolves against it.
+const SPEC_URI: &str = "urn:openapi-validator:spec";
 
 /// Pre-compiled OpenAPI spec optimized for per-request validation.
 pub struct CompiledSpec {
     /// Radix-tree router from request path to the route's compiled operations.
     router: Router<CompiledRoute>,
+    /// The OpenAPI document after dialect rewrites, used to follow `$ref`s at
+    /// request time (e.g. to learn a parameter's declared type).
+    document: Arc<Value>,
 }
 
 impl Default for CompiledSpec {
     fn default() -> Self {
         Self {
             router: Router::new(),
+            document: Arc::new(Value::Null),
         }
     }
 }
@@ -46,8 +56,8 @@ pub struct CompiledParam {
     /// a single comma-separated value (`a=1,2`). Defaults per OpenAPI: true
     /// for query and cookie parameters, false for path and header parameters.
     pub explode: bool,
-    /// The resolved JSON Schema, used to coerce the raw string value into the
-    /// declared type before validation. `None` when the parameter has no schema.
+    /// The parameter's schema as written in the document (may be a `$ref`),
+    /// used to coerce the raw string value into the declared type.
     pub schema: Option<Value>,
     pub schema_validator: Option<Validator>,
 }
@@ -78,7 +88,12 @@ impl CompiledRequestBody {
 pub struct CompiledMediaType {
     /// Media type as declared in the spec, e.g. `application/json` or `application/*`.
     pub media_type: Mime,
+    /// The body schema as written in the document (may be a `$ref`). Form and
+    /// XML decoders use it to map fields and coerce scalar values.
+    pub schema: Option<Value>,
     pub schema_validator: Option<Validator>,
+    /// The media type's `encoding` object, if any (form bodies only).
+    pub encoding: Option<Value>,
 }
 
 /// What parts of the request to validate. Each flag can be toggled independently.
@@ -173,13 +188,16 @@ impl<'a> MatchedRoute<'a> {
 }
 
 impl CompiledSpec {
-    /// Parse an OpenAPI 3.x document from JSON text and compile it.
-    ///
-    /// This is the entry point for callers that do not want to depend on the
-    /// underlying OpenAPI parser crate.
+    /// Parse an OpenAPI 3.0.x or 3.1.x document from JSON text and compile it.
     pub fn from_json(json: &str) -> Result<Self, SpecError> {
-        let spec = oas3::from_json(json).map_err(|e| SpecError::ParseError(e.to_string()))?;
-        compile_spec(&spec)
+        let doc: Value =
+            serde_json::from_str(json).map_err(|e| SpecError::ParseError(e.to_string()))?;
+        compile_document(doc)
+    }
+
+    /// The OpenAPI document after dialect rewrites.
+    pub fn document(&self) -> &Value {
+        &self.document
     }
 
     /// Find a route matching the given request path.
@@ -206,42 +224,155 @@ fn normalize_path(path: &str) -> &str {
     }
 }
 
-/// Compile an oas3::Spec into a CompiledSpec for fast per-request validation.
-pub fn compile_spec(spec: &oas3::Spec) -> Result<CompiledSpec, SpecError> {
-    let mut router = Router::new();
+// ---------------------------------------------------------------------------
+// Document navigation
+// ---------------------------------------------------------------------------
 
-    let Some(paths) = &spec.paths else {
-        return Ok(CompiledSpec { router });
+/// Escape a key for use in a JSON pointer (RFC 6901).
+fn escape_pointer_token(token: &str) -> String {
+    token.replace('~', "~0").replace('/', "~1")
+}
+
+/// Percent-encode a JSON pointer for use as a URI fragment (RFC 3986), so
+/// characters such as `{` in path templates do not break the reference.
+fn fragment_encode(pointer: &str) -> String {
+    const KEEP: &[u8] = b"-._~!$&'()*+,;=:@/?";
+    let mut out = String::with_capacity(pointer.len());
+    for byte in pointer.bytes() {
+        if byte.is_ascii_alphanumeric() || KEEP.contains(&byte) {
+            out.push(byte as char);
+        } else {
+            out.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    out
+}
+
+struct Document {
+    root: Arc<Value>,
+    registry: Registry<'static>,
+}
+
+impl Document {
+    fn node(&self) -> (String, &Value) {
+        (String::new(), &self.root)
+    }
+
+    /// Child of `parent` under `key`, with its pointer.
+    fn child<'v>(
+        &self,
+        parent_pointer: &str,
+        parent: &'v Value,
+        key: &str,
+    ) -> Option<(String, &'v Value)> {
+        let value = parent.get(key)?;
+        Some((
+            format!("{parent_pointer}/{}", escape_pointer_token(key)),
+            value,
+        ))
+    }
+
+    /// Follow a `$ref` (if present) to its target, returning the target's pointer.
+    fn deref<'a>(&'a self, pointer: String, value: &'a Value) -> Result<(String, &'a Value), SpecError> {
+        let mut current = (pointer, value);
+        for _ in 0..32 {
+            let Some(reference) = current.1.get("$ref").and_then(Value::as_str) else {
+                return Ok(current);
+            };
+            let target = resolve_pointer(&self.root, reference)
+                .ok_or_else(|| SpecError::RefResolutionError(reference.to_string()))?;
+            current = (reference.trim_start_matches('#').to_string(), target);
+        }
+        Err(SpecError::RefResolutionError(format!(
+            "reference chain too deep at {}",
+            current.0
+        )))
+    }
+
+    /// Compile the schema at `pointer` into a validator.
+    fn compile_schema(&self, pointer: &str) -> Result<Validator, SpecError> {
+        let schema = json!({ "$ref": format!("{SPEC_URI}#{}", fragment_encode(pointer)) });
+        jsonschema::options()
+            .with_draft(Draft::Draft202012)
+            .with_registry(&self.registry)
+            .build(&schema)
+            .map_err(|e| SpecError::SchemaCompileError(format!("at {pointer}: {e}")))
+    }
+}
+
+const METHODS: [&str; 8] = [
+    "get", "put", "post", "delete", "options", "head", "patch", "trace",
+];
+
+fn compile_document(mut doc: Value) -> Result<CompiledSpec, SpecError> {
+    if !doc.is_object() {
+        return Err(SpecError::ParseError(
+            "OpenAPI document must be a JSON object".to_string(),
+        ));
+    }
+    let version = doc
+        .get("openapi")
+        .and_then(Value::as_str)
+        .ok_or_else(|| SpecError::ParseError("missing 'openapi' version field".to_string()))?
+        .to_string();
+    if !version.starts_with("3.") {
+        return Err(SpecError::ParseError(format!(
+            "unsupported OpenAPI version '{version}'; only 3.0.x and 3.1.x are supported"
+        )));
+    }
+
+    if dialect::is_openapi_30(&version) {
+        dialect::apply_openapi_30(&mut doc)?;
+    }
+    dialect::strip_read_only_required(&mut doc);
+
+    let registry = Registry::new()
+        .add(SPEC_URI, doc.clone())
+        .map_err(|e| SpecError::SchemaCompileError(e.to_string()))?
+        .prepare()
+        .map_err(|e| SpecError::SchemaCompileError(e.to_string()))?;
+    let document = Document {
+        root: Arc::new(doc),
+        registry,
     };
 
-    let compiler = SchemaCompiler::new(spec)?;
+    let mut router = Router::new();
+    let (root_pointer, root) = document.node();
+    let Some((paths_pointer, paths)) = document.child(&root_pointer, root, "paths") else {
+        return Ok(CompiledSpec {
+            router,
+            document: document.root,
+        });
+    };
+    let Some(paths) = paths.as_object() else {
+        return Err(SpecError::ParseError("'paths' must be an object".to_string()));
+    };
 
-    for (path_template, path_item) in paths {
-        // Collect path-level parameters
-        let path_level_params = path_item
-            .parameters
-            .iter()
-            .map(|p| resolve_param(p, spec))
-            .collect::<Result<Vec<_>, _>>()?;
+    for (path_template, item) in paths {
+        let item_pointer = format!("{paths_pointer}/{}", escape_pointer_token(path_template));
+        let (item_pointer, item) = document.deref(item_pointer, item)?;
+
+        let path_level_params = collect_params(&document, &item_pointer, item)?;
 
         let mut operations = HashMap::new();
+        for method in METHODS {
+            let Some((op_pointer, op)) = document.child(&item_pointer, item, method) else {
+                continue;
+            };
+            if !op.is_object() {
+                continue;
+            }
 
-        for (method, operation) in path_item.methods() {
-            // Merge path-level and operation-level parameters.
-            // Operation-level overrides path-level by name+location.
-            let op_params = operation
-                .parameters(spec)
-                .map_err(|e| SpecError::RefResolutionError(e.to_string()))?;
-
-            let mut merged_params = path_level_params.clone();
-            for op_param in op_params {
-                if let Some(existing) = merged_params
+            // Operation-level parameters override path-level ones by name+location.
+            let mut merged = path_level_params.clone();
+            for param in collect_params(&document, &op_pointer, op)? {
+                if let Some(existing) = merged
                     .iter_mut()
-                    .find(|p| p.name == op_param.name && p.location == op_param.location)
+                    .find(|p| p.name == param.name && p.location == param.location)
                 {
-                    *existing = op_param;
+                    *existing = param;
                 } else {
-                    merged_params.push(op_param);
+                    merged.push(param);
                 }
             }
 
@@ -249,25 +380,29 @@ pub fn compile_spec(spec: &oas3::Spec) -> Result<CompiledSpec, SpecError> {
             let mut query_params = Vec::new();
             let mut header_params = Vec::new();
             let mut cookie_params = Vec::new();
-
-            for param in &merged_params {
-                if is_ignored_header_param(param) {
+            for param in &merged {
+                if param.location == "header" && is_ignored_header(&param.name) {
                     continue;
                 }
-                let compiled = compile_param(param, &compiler)?;
-                match param.location {
-                    oas3::spec::ParameterIn::Path => path_params.push(compiled),
-                    oas3::spec::ParameterIn::Query => query_params.push(compiled),
-                    oas3::spec::ParameterIn::Header => header_params.push(compiled),
-                    oas3::spec::ParameterIn::Cookie => cookie_params.push(compiled),
+                let compiled = compile_param(&document, param)?;
+                match param.location.as_str() {
+                    "path" => path_params.push(compiled),
+                    "query" => query_params.push(compiled),
+                    "header" => header_params.push(compiled),
+                    "cookie" => cookie_params.push(compiled),
+                    other => {
+                        return Err(SpecError::ParseError(format!(
+                            "parameter '{}' has unknown location '{other}'",
+                            param.name
+                        )))
+                    }
                 }
             }
 
-            // Compile request body
-            let request_body = compile_request_body(operation, spec, &compiler)?;
+            let request_body = compile_request_body(&document, &op_pointer, op)?;
 
             operations.insert(
-                method.as_str().to_ascii_uppercase(),
+                method.to_ascii_uppercase(),
                 CompiledOperation {
                     path_params,
                     query_params,
@@ -289,147 +424,142 @@ pub fn compile_spec(spec: &oas3::Spec) -> Result<CompiledSpec, SpecError> {
             .map_err(|e| SpecError::PathTemplateError(path_template.clone(), e.to_string()))?;
     }
 
-    Ok(CompiledSpec { router })
+    Ok(CompiledSpec {
+        router,
+        document: document.root,
+    })
+}
+
+/// A parameter object located in the document, with `$ref` already followed.
+#[derive(Clone)]
+struct ParamNode {
+    pointer: String,
+    name: String,
+    location: String,
+    value: Value,
+}
+
+fn collect_params(
+    document: &Document,
+    owner_pointer: &str,
+    owner: &Value,
+) -> Result<Vec<ParamNode>, SpecError> {
+    let Some((list_pointer, list)) = document.child(owner_pointer, owner, "parameters") else {
+        return Ok(Vec::new());
+    };
+    let Some(list) = list.as_array() else {
+        return Err(SpecError::ParseError(format!(
+            "'parameters' at {list_pointer} must be an array"
+        )));
+    };
+
+    let mut params = Vec::with_capacity(list.len());
+    for (index, entry) in list.iter().enumerate() {
+        let (pointer, value) = document.deref(format!("{list_pointer}/{index}"), entry)?;
+        let name = value
+            .get("name")
+            .and_then(Value::as_str)
+            .ok_or_else(|| SpecError::ParseError(format!("parameter at {pointer} has no name")))?;
+        let location = value
+            .get("in")
+            .and_then(Value::as_str)
+            .ok_or_else(|| SpecError::ParseError(format!("parameter '{name}' has no 'in'")))?;
+        params.push(ParamNode {
+            pointer,
+            name: name.to_string(),
+            location: location.to_string(),
+            value: value.clone(),
+        });
+    }
+    Ok(params)
 }
 
 /// OpenAPI: header parameters named Accept, Content-Type or Authorization
 /// are ignored; those headers are governed by other parts of the spec.
-fn is_ignored_header_param(param: &oas3::spec::Parameter) -> bool {
-    param.location == oas3::spec::ParameterIn::Header
-        && ["accept", "content-type", "authorization"]
-            .iter()
-            .any(|h| param.name.eq_ignore_ascii_case(h))
+fn is_ignored_header(name: &str) -> bool {
+    ["accept", "content-type", "authorization"]
+        .iter()
+        .any(|h| name.eq_ignore_ascii_case(h))
 }
 
-const PARAMETER_REF_PREFIX: &str = "#/components/parameters/";
-
-fn resolve_param(
-    param_or_ref: &oas3::spec::ObjectOrReference<oas3::spec::Parameter>,
-    spec: &oas3::Spec,
-) -> Result<oas3::spec::Parameter, SpecError> {
-    match param_or_ref {
-        oas3::spec::ObjectOrReference::Object(p) => Ok(p.clone()),
-        oas3::spec::ObjectOrReference::Ref { ref_path, .. } => {
-            let unresolvable = || SpecError::RefResolutionError(ref_path.clone());
-            let name = ref_path
-                .strip_prefix(PARAMETER_REF_PREFIX)
-                .ok_or_else(unresolvable)?;
-            let resolved = spec
-                .components
-                .as_ref()
-                .and_then(|c| c.parameters.get(name))
-                .ok_or_else(unresolvable)?;
-            resolve_param(resolved, spec)
-        }
-    }
-}
-
-fn compile_param(
-    param: &oas3::spec::Parameter,
-    compiler: &SchemaCompiler,
-) -> Result<CompiledParam, SpecError> {
-    let (schema, schema_validator) = match &param.schema {
-        Some(schema) => {
-            let (json, validator) = compiler.compile(schema)?;
-            (Some(json), Some(validator))
-        }
+fn compile_param(document: &Document, param: &ParamNode) -> Result<CompiledParam, SpecError> {
+    let (schema, schema_validator) = match document.child(&param.pointer, &param.value, "schema") {
+        Some((pointer, schema)) => (
+            Some(schema.clone()),
+            Some(document.compile_schema(&pointer)?),
+        ),
         None => (None, None),
     };
 
-    // OpenAPI default: explode is true for form style (query, cookie) and
-    // false for simple style (path, header).
-    let explode = param.explode.unwrap_or(matches!(
-        param.location,
-        oas3::spec::ParameterIn::Query | oas3::spec::ParameterIn::Cookie
-    ));
+    let is_form_style = matches!(param.location.as_str(), "query" | "cookie");
+    let explode = param
+        .value
+        .get("explode")
+        .and_then(Value::as_bool)
+        .unwrap_or(is_form_style);
+
+    let required = param
+        .value
+        .get("required")
+        .and_then(Value::as_bool)
+        .unwrap_or(param.location == "path");
 
     Ok(CompiledParam {
         name: param.name.clone(),
-        required: param.required.unwrap_or(false),
+        required,
         explode,
         schema,
         schema_validator,
     })
 }
 
-/// Compiles OpenAPI schemas into JSON Schema validators.
-///
-/// Schemas in an OpenAPI document reference each other through
-/// `#/components/schemas/...` pointers that are relative to the whole document,
-/// not to the schema being compiled. To make those pointers resolvable, the
-/// spec's `components.schemas` are embedded into every compiled schema document
-/// under a `components` key, which JSON Schema treats as an unknown keyword.
-struct SchemaCompiler<'s> {
-    spec: &'s oas3::Spec,
-    components: Option<Value>,
-}
-
-impl<'s> SchemaCompiler<'s> {
-    fn new(spec: &'s oas3::Spec) -> Result<Self, SpecError> {
-        let components = match &spec.components {
-            Some(c) if !c.schemas.is_empty() => {
-                let schemas = serde_json::to_value(&c.schemas)
-                    .map_err(|e| SpecError::SchemaCompileError(e.to_string()))?;
-                Some(serde_json::json!({ "schemas": schemas }))
-            }
-            _ => None,
-        };
-        Ok(Self { spec, components })
-    }
-
-    /// Resolve a top-level `$ref` (if any) and compile the schema.
-    ///
-    /// Returns the resolved schema JSON alongside the validator.
-    fn compile(&self, schema: &oas3::spec::Schema) -> Result<(Value, Validator), SpecError> {
-        let resolved = schema
-            .resolve(self.spec)
-            .map_err(|e| SpecError::RefResolutionError(e.to_string()))?;
-        let schema_json = serde_json::to_value(&resolved)
-            .map_err(|e| SpecError::SchemaCompileError(e.to_string()))?;
-
-        let mut document = schema_json.clone();
-        if let (Value::Object(map), Some(components)) = (&mut document, &self.components) {
-            map.entry("components").or_insert_with(|| components.clone());
-        }
-
-        let validator = jsonschema::options()
-            .with_draft(Draft::Draft202012)
-            .build(&document)
-            .map_err(|e| SpecError::SchemaCompileError(e.to_string()))?;
-        Ok((schema_json, validator))
-    }
-}
-
 fn compile_request_body(
-    operation: &oas3::spec::Operation,
-    spec: &oas3::Spec,
-    compiler: &SchemaCompiler,
+    document: &Document,
+    op_pointer: &str,
+    op: &Value,
 ) -> Result<Option<CompiledRequestBody>, SpecError> {
-    let body = match operation.request_body(spec) {
-        Ok(Some(b)) => b,
-        Ok(None) => return Ok(None),
-        Err(e) => return Err(SpecError::RefResolutionError(e.to_string())),
+    let Some((body_pointer, body)) = document.child(op_pointer, op, "requestBody") else {
+        return Ok(None);
     };
+    let (body_pointer, body) = document.deref(body_pointer, body)?;
 
-    let required = body.required.unwrap_or(false);
-    let mut content = Vec::with_capacity(body.content.len());
+    let required = body
+        .get("required")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
 
-    for (media_type_str, media_type) in &body.content {
-        let parsed: Mime = media_type_str.parse().map_err(|e| {
-            SpecError::ParseError(format!(
-                "invalid request body media type '{media_type_str}': {e}"
-            ))
-        })?;
-
-        let schema_validator = match &media_type.schema {
-            Some(schema) => Some(compiler.compile(schema)?.1),
-            None => None,
+    let mut content = Vec::new();
+    if let Some((content_pointer, content_obj)) = document.child(&body_pointer, body, "content") {
+        let Some(entries) = content_obj.as_object() else {
+            return Err(SpecError::ParseError(format!(
+                "'content' at {content_pointer} must be an object"
+            )));
         };
+        for (media_type_str, media) in entries {
+            let media_type: Mime = media_type_str.parse().map_err(|e| {
+                SpecError::ParseError(format!(
+                    "invalid request body media type '{media_type_str}': {e}"
+                ))
+            })?;
+            let media_pointer =
+                format!("{content_pointer}/{}", escape_pointer_token(media_type_str));
 
-        content.push(CompiledMediaType {
-            media_type: parsed,
-            schema_validator,
-        });
+            let (schema, schema_validator) = match document.child(&media_pointer, media, "schema")
+            {
+                Some((pointer, schema)) => (
+                    Some(schema.clone()),
+                    Some(document.compile_schema(&pointer)?),
+                ),
+                None => (None, None),
+            };
+
+            content.push(CompiledMediaType {
+                media_type,
+                schema,
+                schema_validator,
+                encoding: media.get("encoding").cloned(),
+            });
+        }
     }
 
     Ok(Some(CompiledRequestBody { required, content }))
@@ -508,7 +638,6 @@ mod tests {
 
     #[test]
     fn test_different_param_names_at_same_position() {
-        // Each template keeps its own parameter name.
         let spec = build_spec(&["/users/{id}", "/users/{userId}/posts"]);
         let m = spec.match_route("/users/5").unwrap();
         assert_eq!(m.params, vec![("id", "5")]);
@@ -528,7 +657,6 @@ mod tests {
 
     #[test]
     fn test_duplicate_template_with_different_param_name_is_rejected() {
-        // OpenAPI forbids templates that differ only by parameter name.
         let json = r#"{"openapi": "3.1.0", "info": {"title": "t", "version": "1"}, "paths": {
             "/pets/{id}": {"get": {"responses": {"200": {"description": "ok"}}}},
             "/pets/{petId}": {"get": {"responses": {"200": {"description": "ok"}}}}
@@ -542,7 +670,6 @@ mod tests {
     #[test]
     fn test_multiple_routes() {
         let spec = build_spec(&["/users", "/users/{id}", "/posts", "/posts/{id}/comments"]);
-
         assert!(spec.match_route("/users").is_some());
         assert!(spec.match_route("/users/5").is_some());
         assert!(spec.match_route("/posts").is_some());
@@ -596,8 +723,28 @@ mod tests {
         let op = m.check_method("POST").unwrap();
         let body = op.request_body.as_ref().unwrap();
         let validator = body.content[0].schema_validator.as_ref().unwrap();
-        assert!(validator.is_valid(&serde_json::json!({"owner": {"name": "x"}})));
-        assert!(!validator.is_valid(&serde_json::json!({"owner": {}})));
+        assert!(validator.is_valid(&json!({"owner": {"name": "x"}})));
+        assert!(!validator.is_valid(&json!({"owner": {}})));
+    }
+
+    #[test]
+    fn test_component_request_body_and_parameter_refs() {
+        let json = r##"{"openapi": "3.1.0", "info": {"title": "t", "version": "1"},
+          "components": {
+            "parameters": {"Page": {"name": "page", "in": "query", "schema": {"type": "integer"}}},
+            "requestBodies": {"Pet": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["name"]}}}}}
+          },
+          "paths": {"/pets": {"post": {
+            "parameters": [{"$ref": "#/components/parameters/Page"}],
+            "requestBody": {"$ref": "#/components/requestBodies/Pet"},
+            "responses": {"201": {"description": "ok"}}}}}}"##;
+        let spec = CompiledSpec::from_json(json).unwrap();
+        let op = spec.match_route("/pets").unwrap().check_method("POST").unwrap();
+        assert_eq!(op.query_params[0].name, "page");
+        let body = op.request_body.as_ref().unwrap();
+        assert!(body.required);
+        let validator = body.content[0].schema_validator.as_ref().unwrap();
+        assert!(!validator.is_valid(&json!({})));
     }
 
     #[test]
@@ -623,6 +770,23 @@ mod tests {
             CompiledSpec::from_json(json),
             Err(SpecError::RefResolutionError(_))
         ));
+    }
+
+    #[test]
+    fn test_unknown_keywords_survive_compilation() {
+        // Keywords oas-typed parsers tend to drop must still be enforced.
+        let json = r#"{"openapi": "3.1.0", "info": {"title": "t", "version": "1"}, "paths": {"/x": {"post": {
+            "requestBody": {"content": {"application/json": {"schema": {
+                "type": "object", "not": {"required": ["forbidden"]},
+                "patternProperties": {"^n_": {"type": "integer"}}
+            }}}},
+            "responses": {"200": {"description": "ok"}}}}}}"#;
+        let spec = CompiledSpec::from_json(json).unwrap();
+        let op = spec.match_route("/x").unwrap().check_method("POST").unwrap();
+        let v = op.request_body.as_ref().unwrap().content[0].schema_validator.as_ref().unwrap();
+        assert!(!v.is_valid(&json!({"forbidden": 1})));
+        assert!(!v.is_valid(&json!({"n_a": "x"})));
+        assert!(v.is_valid(&json!({"n_a": 1})));
     }
 
     #[test]
