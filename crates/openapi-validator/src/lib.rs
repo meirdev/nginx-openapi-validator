@@ -124,24 +124,17 @@ pub fn validate_request(
 
     // 7 & 8. Content-Type and Body validation
     if let Some(ref req_body) = operation.request_body {
-        let expected_media_types: Vec<&str> = req_body.content.keys().map(|s| s.as_str()).collect();
-
         if parts.content_type {
-            content_type::validate_content_type(
-                request.content_type(),
-                &expected_media_types,
-                &mut errors,
-            );
+            let expected: Vec<&mime::Mime> = req_body.media_types().collect();
+            content_type::validate_content_type(request.content_type(), &expected, &mut errors);
         }
 
         if parts.body {
             // Find the matching media type's schema validator
             let schema_validator = request
                 .content_type()
-                .and_then(|ct| {
-                    let media_type = ct.split(';').next().unwrap_or(ct).trim();
-                    req_body.content.get(media_type)
-                })
+                .and_then(content_type::parse_media_type)
+                .and_then(|ct| req_body.find_media_type(&ct))
                 .and_then(|mt| mt.schema_validator.as_ref());
 
             body_validator::validate_body(
@@ -334,6 +327,22 @@ mod tests {
         };
         let result = validate_request(&spec, &req, &config);
         assert!(!result.is_valid());
+    }
+
+    #[test]
+    fn test_body_schema_applies_regardless_of_content_type_case() {
+        let spec = compile_test_spec();
+        let config = ValidationConfig::default();
+        let req = RequestData {
+            method: "POST".to_string(),
+            path: "/users".to_string(),
+            query_string: None,
+            headers: vec![("Content-Type".to_string(), "Application/JSON; charset=utf-8".to_string())],
+            body: Some(br#"{"email": "alice@example.com"}"#.to_vec()),
+        };
+        let result = validate_request(&spec, &req, &config);
+        assert!(!result.is_valid(), "schema must be enforced when media type differs only by case");
+        assert_eq!(result.http_status(), Some(400));
     }
 
     #[test]

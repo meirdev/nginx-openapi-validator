@@ -1,62 +1,90 @@
+use mime::Mime;
+
 use crate::error::{ValidationError, ValidationErrorKind};
 
-/// Check if the request content type matches any of the expected media types.
+/// Parse a `Content-Type` header value or a spec media type into a [`Mime`].
 ///
-/// Supports exact matches and wildcard patterns like `*/*` and `application/*`.
+/// Parameters such as `charset` are retained on the value but ignored when
+/// matching. Returns `None` for a malformed value.
+pub fn parse_media_type(value: &str) -> Option<Mime> {
+    value.trim().parse().ok()
+}
+
+/// Whether a concrete request media type satisfies a media type from the spec.
+///
+/// `expected` may be a wildcard such as `*/*` or `application/*`. Type and
+/// subtype are compared case-insensitively and parameters are ignored.
+pub fn media_type_matches(expected: &Mime, actual: &Mime) -> bool {
+    if expected.type_() == mime::STAR {
+        return true;
+    }
+    if !expected
+        .type_()
+        .as_str()
+        .eq_ignore_ascii_case(actual.type_().as_str())
+    {
+        return false;
+    }
+    expected.subtype() == mime::STAR
+        || expected
+            .subtype()
+            .as_str()
+            .eq_ignore_ascii_case(actual.subtype().as_str())
+}
+
+/// Check that the request `Content-Type` matches one of the spec's media types.
 pub fn validate_content_type(
     request_content_type: Option<&str>,
-    expected_media_types: &[&str],
+    expected_media_types: &[&Mime],
     errors: &mut Vec<ValidationError>,
 ) {
     if expected_media_types.is_empty() {
         return;
     }
 
-    let request_ct = match request_content_type {
-        Some(ct) => ct,
-        None => {
-            errors.push(ValidationError {
-                kind: ValidationErrorKind::UnsupportedContentType,
-                message: format!(
-                    "Missing Content-Type header. Expected one of: {}",
-                    expected_media_types.join(", ")
-                ),
-                path: "header.Content-Type".to_string(),
-            });
-            return;
-        }
+    let expected_list = || {
+        expected_media_types
+            .iter()
+            .map(|m| m.essence_str())
+            .collect::<Vec<_>>()
+            .join(", ")
     };
 
-    // Extract the media type without parameters (e.g., charset)
-    let request_media_type = request_ct
-        .split(';')
-        .next()
-        .unwrap_or(request_ct)
-        .trim();
+    let Some(raw) = request_content_type else {
+        errors.push(ValidationError {
+            kind: ValidationErrorKind::UnsupportedContentType,
+            message: format!(
+                "Missing Content-Type header. Expected one of: {}",
+                expected_list()
+            ),
+            path: "header.Content-Type".to_string(),
+        });
+        return;
+    };
 
-    let matches = expected_media_types.iter().any(|expected| {
-        if *expected == "*/*" {
-            return true;
-        }
-        if expected.eq_ignore_ascii_case(request_media_type) {
-            return true;
-        }
-        // Check wildcard like "application/*"
-        if let Some(prefix) = expected.strip_suffix("/*") {
-            if let Some(req_prefix) = request_media_type.split('/').next() {
-                return prefix.eq_ignore_ascii_case(req_prefix);
-            }
-        }
-        false
-    });
+    let Some(actual) = parse_media_type(raw) else {
+        errors.push(ValidationError {
+            kind: ValidationErrorKind::UnsupportedContentType,
+            message: format!(
+                "Malformed Content-Type '{}'. Expected one of: {}",
+                raw.trim(),
+                expected_list()
+            ),
+            path: "header.Content-Type".to_string(),
+        });
+        return;
+    };
 
-    if !matches {
+    if !expected_media_types
+        .iter()
+        .any(|expected| media_type_matches(expected, &actual))
+    {
         errors.push(ValidationError {
             kind: ValidationErrorKind::UnsupportedContentType,
             message: format!(
                 "Content-Type '{}' is not supported. Expected one of: {}",
-                request_media_type,
-                expected_media_types.join(", ")
+                actual.essence_str(),
+                expected_list()
             ),
             path: "header.Content-Type".to_string(),
         });
@@ -67,50 +95,67 @@ pub fn validate_content_type(
 mod tests {
     use super::*;
 
+    fn check(request: Option<&str>, expected: &[&str]) -> Vec<ValidationError> {
+        let parsed: Vec<Mime> = expected.iter().map(|m| m.parse().unwrap()).collect();
+        let refs: Vec<&Mime> = parsed.iter().collect();
+        let mut errors = Vec::new();
+        validate_content_type(request, &refs, &mut errors);
+        errors
+    }
+
     #[test]
     fn test_exact_match() {
-        let mut errors = Vec::new();
-        validate_content_type(Some("application/json"), &["application/json"], &mut errors);
-        assert!(errors.is_empty());
+        assert!(check(Some("application/json"), &["application/json"]).is_empty());
     }
 
     #[test]
     fn test_match_with_charset() {
-        let mut errors = Vec::new();
-        validate_content_type(
+        assert!(check(
             Some("application/json; charset=utf-8"),
-            &["application/json"],
-            &mut errors,
-        );
-        assert!(errors.is_empty());
+            &["application/json"]
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn test_match_is_case_insensitive() {
+        assert!(check(Some("Application/JSON"), &["application/json"]).is_empty());
     }
 
     #[test]
     fn test_wildcard_match() {
-        let mut errors = Vec::new();
-        validate_content_type(Some("application/json"), &["application/*"], &mut errors);
-        assert!(errors.is_empty());
+        assert!(check(Some("application/json"), &["application/*"]).is_empty());
+        assert!(check(Some("text/plain"), &["*/*"]).is_empty());
+        assert!(!check(Some("text/plain"), &["application/*"]).is_empty());
+    }
+
+    #[test]
+    fn test_structured_suffix_is_not_a_match() {
+        // OpenAPI media types are matched exactly; +json suffixes are distinct types.
+        assert!(!check(Some("application/vnd.api+json"), &["application/json"]).is_empty());
     }
 
     #[test]
     fn test_no_match() {
-        let mut errors = Vec::new();
-        validate_content_type(Some("text/plain"), &["application/json"], &mut errors);
+        let errors = check(Some("text/plain"), &["application/json"]);
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].kind, ValidationErrorKind::UnsupportedContentType);
     }
 
     #[test]
     fn test_missing_content_type() {
-        let mut errors = Vec::new();
-        validate_content_type(None, &["application/json"], &mut errors);
+        assert_eq!(check(None, &["application/json"]).len(), 1);
+    }
+
+    #[test]
+    fn test_malformed_content_type() {
+        let errors = check(Some("json"), &["application/json"]);
         assert_eq!(errors.len(), 1);
+        assert!(errors[0].message.starts_with("Malformed Content-Type"));
     }
 
     #[test]
     fn test_empty_expected_skips() {
-        let mut errors = Vec::new();
-        validate_content_type(Some("anything"), &[], &mut errors);
-        assert!(errors.is_empty());
+        assert!(check(Some("anything"), &[]).is_empty());
     }
 }

@@ -2,6 +2,9 @@ use std::collections::HashMap;
 
 use jsonschema::Validator;
 use matchit::Router;
+use mime::Mime;
+
+use crate::content_type::media_type_matches;
 
 use crate::error::{SpecError, ValidationError, ValidationErrorKind};
 
@@ -43,11 +46,30 @@ pub struct CompiledParam {
 
 pub struct CompiledRequestBody {
     pub required: bool,
-    /// Keyed by media type (e.g., "application/json")
-    pub content: HashMap<String, CompiledMediaType>,
+    /// Media types accepted by this body, in spec order.
+    pub content: Vec<CompiledMediaType>,
+}
+
+impl CompiledRequestBody {
+    /// The media types declared in the spec for this body.
+    pub fn media_types(&self) -> impl Iterator<Item = &Mime> {
+        self.content.iter().map(|m| &m.media_type)
+    }
+
+    /// Find the first declared media type that accepts `actual`.
+    ///
+    /// Wildcards in the spec (`application/*`, `*/*`) are honoured and the
+    /// comparison is case-insensitive.
+    pub fn find_media_type(&self, actual: &Mime) -> Option<&CompiledMediaType> {
+        self.content
+            .iter()
+            .find(|m| media_type_matches(&m.media_type, actual))
+    }
 }
 
 pub struct CompiledMediaType {
+    /// Media type as declared in the spec, e.g. `application/json` or `application/*`.
+    pub media_type: Mime,
     pub schema_validator: Option<Validator>,
 }
 
@@ -311,18 +333,24 @@ fn compile_request_body(
     };
 
     let required = body.required.unwrap_or(false);
-    let mut content = HashMap::new();
+    let mut content = Vec::with_capacity(body.content.len());
 
     for (media_type_str, media_type) in &body.content {
+        let parsed: Mime = media_type_str.parse().map_err(|e| {
+            SpecError::ParseError(format!(
+                "invalid request body media type '{media_type_str}': {e}"
+            ))
+        })?;
+
         let schema_validator = match &media_type.schema {
             Some(schema) => Some(compile_schema(schema, spec)?),
             None => None,
         };
 
-        content.insert(
-            media_type_str.clone(),
-            CompiledMediaType { schema_validator },
-        );
+        content.push(CompiledMediaType {
+            media_type: parsed,
+            schema_validator,
+        });
     }
 
     Ok(Some(CompiledRequestBody { required, content }))
