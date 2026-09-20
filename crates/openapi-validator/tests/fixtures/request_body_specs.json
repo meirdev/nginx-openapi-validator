@@ -1,0 +1,955 @@
+{
+  "NotRequiredBody": {
+    "source": "requests/validate_body_test.go::TestValidateBody_NotRequiredBody",
+    "spec": {
+      "openapi": "3.1.0",
+      "paths": {
+        "/burgers/createBurger": {
+          "post": {
+            "requestBody": {
+              "required": false,
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "patties": {
+                        "type": "integer"
+                      },
+                      "vegetarian": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "OK"
+              }
+            }
+          }
+        }
+      },
+      "info": {
+        "title": "Request body parity",
+        "version": "1.0.0"
+      }
+    }
+  },
+  "MediaRangeContentType_Wildcard_end": {
+    "source": "requests/validate_body_test.go::TestValidateBody_MediaRangeContentType_Wildcard_end",
+    "spec": {
+      "openapi": "3.1.0",
+      "paths": {
+        "/burgers/createBurger": {
+          "post": {
+            "requestBody": {
+              "required": true,
+              "content": {
+                "thomas/*": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "patties": {
+                        "type": "integer"
+                      },
+                      "vegetarian": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "OK"
+              }
+            }
+          }
+        }
+      },
+      "info": {
+        "title": "Request body parity",
+        "version": "1.0.0"
+      }
+    }
+  },
+  "MediaRangeContentType_Wildcards": {
+    "source": "requests/validate_body_test.go::TestValidateBody_MediaRangeContentType_Wildcards",
+    "spec": {
+      "openapi": "3.1.0",
+      "paths": {
+        "/burgers/createBurger": {
+          "post": {
+            "requestBody": {
+              "required": true,
+              "content": {
+                "*/*": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "patties": {
+                        "type": "integer"
+                      },
+                      "vegetarian": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "OK"
+              }
+            }
+          }
+        }
+      },
+      "info": {
+        "title": "Request body parity",
+        "version": "1.0.0"
+      }
+    }
+  },
+  "InvalidBasicSchema_MediaRangeContentType_Wildcard_Required": {
+    "source": "requests/validate_body_test.go::TestValidateBody_InvalidBasicSchema_MediaRangeContentType_Wildcard_Required",
+    "spec": {
+      "openapi": "3.1.0",
+      "paths": {
+        "/burgers/createBurger": {
+          "post": {
+            "requestBody": {
+              "required": false,
+              "content": {
+                "*/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "patties": {
+                        "type": "integer"
+                      },
+                      "vegetarian": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "OK"
+              }
+            }
+          }
+        }
+      },
+      "info": {
+        "title": "Request body parity",
+        "version": "1.0.0"
+      }
+    }
+  },
+  "ValidBasicSchema": {
+    "source": "requests/validate_body_test.go::TestValidateBody_ValidBasicSchema",
+    "spec": {
+      "openapi": "3.1.0",
+      "paths": {
+        "/burgers/createBurger": {
+          "post": {
+            "requestBody": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "patties": {
+                        "type": "integer"
+                      },
+                      "vegetarian": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "OK"
+              }
+            }
+          }
+        }
+      },
+      "info": {
+        "title": "Request body parity",
+        "version": "1.0.0"
+      }
+    }
+  },
+  "ValidSchemaUsingAllOf": {
+    "source": "requests/validate_body_test.go::TestValidateBody_ValidSchemaUsingAllOf",
+    "spec": {
+      "openapi": "3.1.0",
+      "paths": {
+        "/burgers/createBurger": {
+          "post": {
+            "requestBody": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schema_validation/TestBody"
+                  }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "OK"
+              }
+            }
+          }
+        }
+      },
+      "components": {
+        "schema_validation": {
+          "Nutrients": {
+            "type": "object",
+            "required": [
+              "fat",
+              "salt",
+              "meat"
+            ],
+            "properties": {
+              "fat": {
+                "type": "number"
+              },
+              "salt": {
+                "type": "number"
+              },
+              "meat": {
+                "type": "string",
+                "enum": [
+                  "beef",
+                  "pork",
+                  "lamb",
+                  "vegetables"
+                ]
+              }
+            }
+          },
+          "TestBody": {
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schema_validation/Nutrients"
+              }
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "patties": {
+                "type": "integer"
+              },
+              "vegetarian": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "name",
+              "patties",
+              "vegetarian"
+            ]
+          }
+        }
+      },
+      "info": {
+        "title": "Request body parity",
+        "version": "1.0.0"
+      }
+    }
+  },
+  "ValidSchemaUsingAllOfAnyOf": {
+    "source": "requests/validate_body_test.go::TestValidateBody_ValidSchemaUsingAllOfAnyOf",
+    "spec": {
+      "openapi": "3.1.0",
+      "paths": {
+        "/burgers/createBurger": {
+          "post": {
+            "requestBody": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schema_validation/TestBody"
+                  }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "OK"
+              }
+            }
+          }
+        }
+      },
+      "components": {
+        "schema_validation": {
+          "Uncooked": {
+            "type": "object",
+            "required": [
+              "uncookedWeight",
+              "uncookedHeight"
+            ],
+            "properties": {
+              "uncookedWeight": {
+                "type": "number"
+              },
+              "uncookedHeight": {
+                "type": "number"
+              }
+            }
+          },
+          "Cooked": {
+            "type": "object",
+            "required": [
+              "usedOil",
+              "usedAnimalFat"
+            ],
+            "properties": {
+              "usedOil": {
+                "type": "boolean"
+              },
+              "usedAnimalFat": {
+                "type": "boolean"
+              }
+            }
+          },
+          "Nutrients": {
+            "type": "object",
+            "required": [
+              "fat",
+              "salt",
+              "meat"
+            ],
+            "properties": {
+              "fat": {
+                "type": "number"
+              },
+              "salt": {
+                "type": "number"
+              },
+              "meat": {
+                "type": "string",
+                "enum": [
+                  "beef",
+                  "pork",
+                  "lamb",
+                  "vegetables"
+                ]
+              }
+            }
+          },
+          "TestBody": {
+            "type": "object",
+            "oneOf": [
+              {
+                "$ref": "#/components/schema_validation/Uncooked"
+              },
+              {
+                "$ref": "#/components/schema_validation/Cooked"
+              }
+            ],
+            "allOf": [
+              {
+                "$ref": "#/components/schema_validation/Nutrients"
+              }
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "patties": {
+                "type": "integer"
+              },
+              "vegetarian": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "name",
+              "patties",
+              "vegetarian"
+            ]
+          }
+        }
+      },
+      "info": {
+        "title": "Request body parity",
+        "version": "1.0.0"
+      }
+    }
+  },
+  "InvalidSchemaMinMax": {
+    "source": "requests/validate_body_test.go::TestValidateBody_InvalidSchemaMinMax",
+    "spec": {
+      "openapi": "3.1.0",
+      "paths": {
+        "/burgers/createBurger": {
+          "post": {
+            "requestBody": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schema_validation/TestBody"
+                  }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "OK"
+              }
+            }
+          }
+        }
+      },
+      "components": {
+        "schema_validation": {
+          "TestBody": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "patties": {
+                "type": "integer",
+                "maximum": 3,
+                "minimum": 1
+              },
+              "vegetarian": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "name",
+              "patties",
+              "vegetarian"
+            ]
+          }
+        }
+      },
+      "info": {
+        "title": "Request body parity",
+        "version": "1.0.0"
+      }
+    }
+  },
+  "InvalidSchemaMaxItems": {
+    "source": "requests/validate_body_test.go::TestValidateBody_InvalidSchemaMaxItems",
+    "spec": {
+      "openapi": "3.1.0",
+      "paths": {
+        "/burgers/createBurger": {
+          "post": {
+            "requestBody": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schema_validation/TestBody"
+                  }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "OK"
+              }
+            }
+          }
+        }
+      },
+      "components": {
+        "schema_validation": {
+          "TestBody": {
+            "type": "array",
+            "maxItems": 2,
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "patties": {
+                  "type": "integer",
+                  "maximum": 3,
+                  "minimum": 1
+                },
+                "vegetarian": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "name",
+                "patties",
+                "vegetarian"
+              ]
+            }
+          }
+        }
+      },
+      "info": {
+        "title": "Request body parity",
+        "version": "1.0.0"
+      }
+    }
+  },
+  "SchemaHasNoRequestBody": {
+    "source": "requests/validate_body_test.go::TestValidateBody_SchemaHasNoRequestBody",
+    "spec": {
+      "openapi": "3.1.0",
+      "paths": {
+        "/burgers/createBurger": {
+          "post": {
+            "responses": {
+              "200": {
+                "description": "OK"
+              }
+            }
+          }
+        }
+      },
+      "info": {
+        "title": "Request body parity",
+        "version": "1.0.0"
+      }
+    }
+  },
+  "MediaTypeHasNullSchema": {
+    "source": "requests/validate_body_test.go::TestValidateBody_MediaTypeHasNullSchema",
+    "spec": {
+      "openapi": "3.1.0",
+      "paths": {
+        "/burgers/createBurger": {
+          "post": {
+            "requestBody": {
+              "content": {
+                "application/json": null
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "OK"
+              }
+            }
+          }
+        }
+      },
+      "info": {
+        "title": "Request body parity",
+        "version": "1.0.0"
+      }
+    }
+  },
+  "MissingBody": {
+    "source": "requests/validate_body_test.go::TestValidateBody_MissingBody",
+    "spec": {
+      "openapi": "3.1.0",
+      "paths": {
+        "/burgers/createBurger": {
+          "post": {
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schema_validation/TestBody"
+                  }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "OK"
+              }
+            }
+          }
+        }
+      },
+      "components": {
+        "schema_validation": {
+          "TestBody": {
+            "type": "array",
+            "maxItems": 2,
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "patties": {
+                  "type": "integer",
+                  "maximum": 3,
+                  "minimum": 1
+                },
+                "vegetarian": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "name",
+                "patties",
+                "vegetarian"
+              ]
+            }
+          }
+        }
+      },
+      "info": {
+        "title": "Request body parity",
+        "version": "1.0.0"
+      }
+    }
+  },
+  "SchemaNoType_Issue75": {
+    "source": "requests/validate_body_test.go::TestValidateBody_SchemaNoType_Issue75",
+    "spec": {
+      "openapi": "3.0.1",
+      "info": {
+        "title": "testing",
+        "description": "<p>This is for testing purpose</p>",
+        "version": "1.0",
+        "x-targetEndpoint": "https://mocktarget.apigee.net/json"
+      },
+      "servers": [
+        {
+          "url": "https://some-url.com"
+        }
+      ],
+      "paths": {
+        "/path1": {
+          "put": {
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "age": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "email": {
+                            "type": "string"
+                          },
+                          "address": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "email"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "OK"
+              }
+            }
+          }
+        },
+        "/path2": {
+          "get": {
+            "parameters": [
+              {
+                "name": "X-My-Header",
+                "in": "header",
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            ],
+            "responses": {
+              "200": {
+                "description": "OK"
+              }
+            }
+          }
+        },
+        "/path3": {
+          "get": {
+            "parameters": [
+              {
+                "name": "id",
+                "in": "query",
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            ],
+            "responses": {
+              "200": {
+                "description": "OK"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "OptionalRequestBody_EmptyBody": {
+    "source": "requests/validate_body_test.go::TestValidateBody_OptionalRequestBody_EmptyBody",
+    "spec": {
+      "openapi": "3.0.1",
+      "info": {
+        "title": "test",
+        "version": "1.0"
+      },
+      "paths": {
+        "/test": {
+          "post": {
+            "requestBody": {
+              "required": false,
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "OK"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "URLEncodedRequest": {
+    "source": "requests/validate_body_test.go::TestValidateBody_URLEncodedRequest",
+    "spec": {
+      "openapi": "3.1.0",
+      "paths": {
+        "/burgers/createBurger": {
+          "post": {
+            "requestBody": {
+              "content": {
+                "application/x-www-form-urlencoded": {
+                  "schema": {
+                    "type": "object",
+                    "required": [
+                      "name"
+                    ],
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "patties": {
+                        "type": "integer"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "OK"
+              }
+            }
+          }
+        }
+      },
+      "info": {
+        "title": "Request body parity",
+        "version": "1.0.0"
+      }
+    }
+  },
+  "XmlRequest": {
+    "source": "requests/validate_body_test.go::TestValidateBody_XmlRequest",
+    "spec": {
+      "openapi": "3.1.0",
+      "paths": {
+        "/burgers/createBurger": {
+          "post": {
+            "requestBody": {
+              "content": {
+                "application/xml": {
+                  "schema": {
+                    "type": "object",
+                    "required": [
+                      "name"
+                    ],
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "patties": {
+                        "type": "integer",
+                        "xml": {
+                          "name": "cost"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "OK"
+              }
+            }
+          }
+        }
+      },
+      "info": {
+        "title": "Request body parity",
+        "version": "1.0.0"
+      }
+    }
+  },
+  "XmlMalformedRequest": {
+    "source": "requests/validate_body_test.go::TestValidateBody_XmlMalformedRequest",
+    "spec": {
+      "openapi": "3.1.0",
+      "paths": {
+        "/burgers/createBurger": {
+          "post": {
+            "requestBody": {
+              "content": {
+                "application/xml": {
+                  "schema": {
+                    "type": "object",
+                    "required": [
+                      "name"
+                    ],
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "patties": {
+                        "type": "integer",
+                        "xml": {
+                          "name": "cost"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "OK"
+              }
+            }
+          }
+        }
+      },
+      "info": {
+        "title": "Request body parity",
+        "version": "1.0.0"
+      }
+    }
+  },
+  "XmlRequestTransformations": {
+    "source": "requests/validate_body_test.go::TestValidateBody_XmlRequestTransformations",
+    "spec": {
+      "openapi": "3.1.0",
+      "paths": {
+        "/burgers/createBurger": {
+          "post": {
+            "requestBody": {
+              "content": {
+                "application/xml": {
+                  "schema": {
+                    "type": "object",
+                    "xml": {
+                      "name": "Burger"
+                    },
+                    "required": [
+                      "name",
+                      "patties"
+                    ],
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "patties": {
+                        "type": "integer",
+                        "xml": {
+                          "name": "cost"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "responses": {
+              "200": {
+                "description": "OK"
+              }
+            }
+          }
+        }
+      },
+      "info": {
+        "title": "Request body parity",
+        "version": "1.0.0"
+      }
+    }
+  }
+}

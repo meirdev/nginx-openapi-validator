@@ -202,7 +202,7 @@ fn is_json_content_type(content_type: &str) -> bool {
 
 /// Walk a schema along a bracket path: numeric segments select `items`,
 /// others select `properties`.
-fn navigate<'a>(root: &'a Value, schema: Option<&'a Value>, path: &[String]) -> Option<&'a Value> {
+pub(crate) fn navigate<'a>(root: &'a Value, schema: Option<&'a Value>, path: &[String]) -> Option<&'a Value> {
     let mut current = schema;
     for segment in path {
         current = if segment.is_empty() || segment.chars().all(|c| c.is_ascii_digit()) {
@@ -216,7 +216,7 @@ fn navigate<'a>(root: &'a Value, schema: Option<&'a Value>, path: &[String]) -> 
 }
 
 /// `content[0][name]` → (`content`, [`0`, `name`]).
-fn split_bracket_path(key: &str) -> (String, Vec<String>) {
+pub(crate) fn split_bracket_path(key: &str) -> (String, Vec<String>) {
     let Some(open) = key.find('[') else {
         return (key.to_string(), Vec::new());
     };
@@ -240,7 +240,7 @@ fn split_bracket_path(key: &str) -> (String, Vec<String>) {
 
 /// Insert `leaf` at `path` inside `target`, creating arrays for numeric or
 /// empty segments and objects otherwise.
-fn insert_path(target: &mut Value, path: &[String], leaf: Value) {
+pub(crate) fn insert_path(target: &mut Value, path: &[String], leaf: Value) {
     let Some((segment, rest)) = path.split_first() else {
         *target = leaf;
         return;

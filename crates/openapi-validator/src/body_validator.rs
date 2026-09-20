@@ -27,16 +27,25 @@ pub fn validate_body(
     errors: &mut Vec<ValidationError>,
 ) {
     let raw = match body {
-        None | Some(b"") => {
-            if body_required {
-                errors.push(ValidationError {
-                    kind: ValidationErrorKind::MissingRequiredBody,
-                    message: "Request body is required but missing".to_string(),
-                    path: "body".to_string(),
-                });
-            }
+        None | Some(b"") if body_required => {
+            errors.push(ValidationError {
+                kind: ValidationErrorKind::MissingRequiredBody,
+                message: "Request body is required but missing".to_string(),
+                path: "body".to_string(),
+            });
             return;
         }
+        None => return,
+        // An explicitly present but empty XML body is not a document.
+        Some(b"") if kind == BodyKind::Xml => {
+            errors.push(ValidationError {
+                kind: ValidationErrorKind::InvalidBody,
+                message: "Request body is empty; expected an XML document".to_string(),
+                path: "body".to_string(),
+            });
+            return;
+        }
+        Some(b"") => return,
         Some(raw) => raw,
     };
 

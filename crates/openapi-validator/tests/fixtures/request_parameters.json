@@ -1,0 +1,1374 @@
+{
+  "query_param_missing": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamMissing",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"string"}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"missing_required_param","error_path":"query.fishy"}
+  },
+  "query_param_not_missing": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamNotMissing",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"string"}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=cod","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_minimum_length_violation": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamMinimumLength_violation",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"string","minLength":4}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=cod","headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"query.fishy"}
+  },
+  "query_param_minimum": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamMinimum",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"string","minLength":4}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=salmon","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_maximum": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamMaximum",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"string","maxLength":10}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=salmon","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_post": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamPost",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"string"}},
+    "request": {"method":"POST","path":"/a/fishy/on/a/dishy","query_string":"fishy=cod","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_put": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamPut",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"string"}},
+    "request": {"method":"PUT","path":"/a/fishy/on/a/dishy","query_string":"fishy=cod","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_delete": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamDelete",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"string"}},
+    "request": {"method":"DELETE","path":"/a/fishy/on/a/dishy","query_string":"fishy=cod","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_options": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamOptions",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"string"}},
+    "request": {"method":"OPTIONS","path":"/a/fishy/on/a/dishy","query_string":"fishy=cod","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_head": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamHead",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"string"}},
+    "request": {"method":"HEAD","path":"/a/fishy/on/a/dishy","query_string":"fishy=cod","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_patch": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamPatch",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"string"}},
+    "request": {"method":"PATCH","path":"/a/fishy/on/a/dishy","query_string":"fishy=cod","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_trace": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamTrace",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"string"}},
+    "request": {"method":"TRACE","path":"/a/fishy/on/a/dishy","query_string":"fishy=cod","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_bad_path": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamBadPath",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"number"}},
+    "request": {"method":"GET","path":"/Not/Found/dishy","query_string":"fishy=cod","headers":[]},
+    "expected": {"valid":false,"error_kind":"path_not_found","error_path":"path"}
+  },
+  "query_param_wrong_type_number": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamWrongTypeNumber",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"number"}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=cod","headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"query.fishy"}
+  },
+  "query_param_valid_type_number": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamValidTypeNumber",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"number"}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=123.4","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_minimum_number": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamMinimumNumber",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"number","minimum":200}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=300.4","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_minimum_number_violation": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamMinimumNumber_violation",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"number","minimum":200}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=123.4","headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"query.fishy"}
+  },
+  "query_param_maximum_number": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamMaximumNumber",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"number","maximum":200}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=123","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_maximum_number_violation": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamMaximumNumber_violation",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"number","maximum":200}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=1234.5","headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"query.fishy"}
+  },
+  "query_param_valid_type_float": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamValidTypeFloat",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"number"}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=123.223","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_wrong_type_integer_string_value": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamWrongTypeInteger_StringValue",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"integer"}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=cod","headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"query.fishy"}
+  },
+  "query_param_wrong_type_integer_float_value": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamWrongTypeInteger_FloatValue",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"integer"}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=1.2","headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"query.fishy"}
+  },
+  "query_param_valid_type_integer": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamValidTypeInteger",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"integer"}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=123","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_minimum_integer": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamMinimumInteger",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"integer","minimum":200}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=300","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_minimum_integer_violation": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamMinimumInteger_violation",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"integer","minimum":200}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=123","headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"query.fishy"}
+  },
+  "query_param_maximum_integer": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamMaximumInteger",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"integer","maximum":200}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=123","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_maximum_integer_violation": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamMaximumInteger_violation",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"integer","maximum":200}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=1234","headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"query.fishy"}
+  },
+  "query_param_wrong_type_bool": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamWrongTypeBool",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"boolean"}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=cod","headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"query.fishy"}
+  },
+  "query_param_valid_type_bool": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamValidTypeBool",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"boolean"}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=true","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_invalid_enum_string": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamInvalidEnumString",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"string","enum":["cod","halibut"]}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=cod&fishy=haddock","headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"query.fishy"}
+  },
+  "query_param_invalid_enum_integer": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamInvalidEnumInteger",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"integer","enum":[1,99]}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=22","headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"query.fishy"}
+  },
+  "query_param_valid_enum_integer": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamValidEnumInteger",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"integer","enum":[1,99]}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=1","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_invalid_enum_number": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamInvalidEnumNumber",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"number","enum":[1.2,99.8]}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=22.4","headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"query.fishy"}
+  },
+  "query_param_valid_enum_number": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamValidEnumNumber",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"number","enum":[1.2,99.8]}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=1.2","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_valid_type_array_string": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamValidTypeArrayString",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"array","items":{"type":"string"}}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=cod&fishy=haddock","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_invalid_type_array_string_enum": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamInvalidTypeArrayStringEnum",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"array","items":{"type":"string","enum":["cod","halibut"]}}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=cod&fishy=haddock","headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"query.fishy"}
+  },
+  "query_param_invalid_type_array_integer_enum": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamInvalidTypeArrayIntegerEnum",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"array","items":{"type":"integer","enum":[1,99]}}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=1&fishy=2","headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"query.fishy"}
+  },
+  "query_param_invalid_type_array_integer": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamInvalidTypeArrayInteger",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"array","items":{"type":"integer"}}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=cod&fishy=haddock","headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"query.fishy"}
+  },
+  "query_param_invalid_type_array_number_enum": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamInvalidTypeArrayNumberEnum",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"array","items":{"type":"number","enum":[1.2,99.8]}}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=1.2&fishy=2.3","headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"query.fishy"}
+  },
+  "query_param_invalid_type_array_number": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamInvalidTypeArrayNumber",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"array","items":{"type":"number"}}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=cod&fishy=haddock","headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"query.fishy"}
+  },
+  "query_param_valid_enum_string_type": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamValidEnumStringType",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"array","items":{"type":"string","enum":["cod","haddock"]}}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=cod,haddock","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_valid_exploded_type": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamValidExplodedType",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"explode":true,"schema":{"type":"array","items":{"type":"string"}}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=cod,haddock","headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"query.fishy"}
+  },
+  "query_param_valid_exploded_array": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamValidExplodedArray",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"explode":true,"schema":{"type":"array","items":{"type":"number"}}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=1&fishy=2","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_invalid_exploded_array_and_invalid_type": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamInvalidExplodedArrayAndInvalidType",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"explode":true,"schema":{"type":"array","items":{"type":"number"}}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=haddock&fishy=cod","headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"query.fishy"}
+  },
+  "query_param_valid_exploded": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamValidExploded",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"explode":false,"schema":{"type":"array","items":{"type":"string"}}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=cod,haddock,mackrel","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_invalid_type_array_bool": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamInvalidTypeArrayBool",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"array","items":{"type":"boolean"}}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=cod&fishy=haddock","headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"query.fishy"}
+  },
+  "query_param_invalid_type_array_float": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamInvalidTypeArrayFloat",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"schema":{"type":"array","items":{"type":"number"}}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=12&fishy=12.12&fishy=1234567789.1233456657","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_invalid_type_array_float_pipe_delimited": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamInvalidTypeArrayFloatPipeDelimited",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","style":"pipeDelimited","required":true,"schema":{"type":"array","items":{"type":"number"}}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=12|12345.2344|22111233444.342452435","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "query_param_invalid_type_array_object_pipe_delimited": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamInvalidTypeArrayObjectPipeDelimited",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","style":"pipeDelimited","required":true,"schema":{"type":"object","properties":{"ocean":{"type":"number"},"silver":{"type":"number"}},"required":["ocean","silver"]}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy=ocean|12|silver|12.2345","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "header_param_missing": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamMissing",
+    "template": "/bish/bosh",
+    "parameter": {"name":"bash","in":"header","required":true,"schema":{"type":"string"}},
+    "request": {"method":"GET","path":"/bish/bosh","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"missing_required_param","error_path":"header.bash"}
+  },
+  "header_path_missing": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderPathMissing",
+    "template": "/bish/bosh",
+    "parameter": {"name":"bash","in":"header","required":true,"schema":{"type":"string"}},
+    "request": {"method":"GET","path":"/I/do/not/exist","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"path_not_found","error_path":"path"}
+  },
+  "header_param_default_encoding_invalid_param_type_integer": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamDefaultEncoding_InvalidParamTypeInteger",
+    "template": "/vending/drinks",
+    "parameter": {"name":"coffeeCups","in":"header","required":true,"schema":{"type":"integer"}},
+    "request": {"method":"GET","path":"/vending/drinks","query_string":null,"headers":[["coffeecups","two"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"header.coffeeCups"}
+  },
+  "header_param_default_encoding_invalid_param_type_number": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamDefaultEncoding_InvalidParamTypeNumber",
+    "template": "/vending/drinks",
+    "parameter": {"name":"coffeeCups","in":"header","required":true,"schema":{"type":"number"}},
+    "request": {"method":"GET","path":"/vending/drinks","query_string":null,"headers":[["coffeecups","two"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"header.coffeeCups"}
+  },
+  "header_param_default_encoding_invalid_param_type_boolean": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamDefaultEncoding_InvalidParamTypeBoolean",
+    "template": "/vending/drinks",
+    "parameter": {"name":"coffeeCups","in":"header","required":true,"schema":{"type":"boolean"}},
+    "request": {"method":"GET","path":"/vending/drinks","query_string":null,"headers":[["coffeecups","two"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"header.coffeeCups"}
+  },
+  "header_param_default_encoding_invalid_param_type_object_invalid": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamDefaultEncoding_InvalidParamTypeObjectInvalid",
+    "template": "/vending/drinks",
+    "parameter": {"name":"coffeeCups","in":"header","required":true,"schema":{"type":"object","properties":{"milk":{"type":"boolean"},"sugar":{"type":"boolean"}}}},
+    "request": {"method":"GET","path":"/vending/drinks","query_string":null,"headers":[["coffeecups","I am not an object"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"header.coffeeCups"}
+  },
+  "header_param_default_encoding_invalid_param_type_object_integer": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamDefaultEncoding_InvalidParamTypeObjectInteger",
+    "template": "/vending/drinks",
+    "parameter": {"name":"coffeeCups","in":"header","required":true,"schema":{"type":"object","properties":{"milk":{"type":"integer"},"sugar":{"type":"boolean"}}}},
+    "request": {"method":"GET","path":"/vending/drinks","query_string":null,"headers":[["coffeecups","milk,true,sugar,true"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"header.coffeeCups"}
+  },
+  "header_param_default_encoding_invalid_param_type_object_number": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamDefaultEncoding_InvalidParamTypeObjectNumber",
+    "template": "/vending/drinks",
+    "parameter": {"name":"coffeeCups","in":"header","required":true,"schema":{"type":"object","properties":{"milk":{"type":"number"},"sugar":{"type":"boolean"}}}},
+    "request": {"method":"GET","path":"/vending/drinks","query_string":null,"headers":[["coffeecups","milk,true,sugar,true"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"header.coffeeCups"}
+  },
+  "header_param_default_encoding_valid_param_type_object_boolean": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamDefaultEncoding_ValidParamTypeObjectBoolean",
+    "template": "/vending/drinks",
+    "parameter": {"name":"coffeeCups","in":"header","required":true,"schema":{"type":"object","properties":{"milk":{"type":"number"},"sugar":{"type":"boolean"}}}},
+    "request": {"method":"GET","path":"/vending/drinks","query_string":null,"headers":[["coffeecups","milk,123,sugar,true"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "header_param_invalid_simple_encoding": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamInvalidSimpleEncoding",
+    "template": "/vending/drinks",
+    "parameter": {"name":"coffeeCups","in":"header","required":true,"explode":false,"schema":{"type":"object","properties":{"milk":{"type":"number"},"sugar":{"type":"boolean"}}}},
+    "request": {"method":"GET","path":"/vending/drinks","query_string":null,"headers":[["coffeecups","milk,123,sugar,true"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "header_param_non_default_encoding_valid_param_type_object": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamNonDefaultEncoding_ValidParamTypeObject",
+    "template": "/vending/drinks",
+    "parameter": {"name":"coffeeCups","in":"header","required":true,"explode":true,"schema":{"type":"object","properties":{"milk":{"type":"number"},"sugar":{"type":"boolean"}}}},
+    "request": {"method":"GET","path":"/vending/drinks","query_string":null,"headers":[["coffeecups","milk=123,sugar=true"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "header_param_non_default_encoding_invalid_param_type_object_number": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamNonDefaultEncoding_InvalidParamTypeObjectNumber",
+    "template": "/vending/drinks",
+    "parameter": {"name":"coffeeCups","in":"header","required":true,"explode":true,"schema":{"type":"object","properties":{"milk":{"type":"number"},"sugar":{"type":"boolean"}}}},
+    "request": {"method":"GET","path":"/vending/drinks","query_string":null,"headers":[["coffeecups","milk=true,sugar=true"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"header.coffeeCups"}
+  },
+  "header_param_non_default_encoding_invalid_param_type_object_integer": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamNonDefaultEncoding_InvalidParamTypeObjectInteger",
+    "template": "/vending/drinks",
+    "parameter": {"name":"coffeeCups","in":"header","required":true,"explode":true,"schema":{"type":"object","properties":{"milk":{"type":"integer"},"sugar":{"type":"boolean"}}}},
+    "request": {"method":"GET","path":"/vending/drinks","query_string":null,"headers":[["coffeecups","milk=true,sugar=true"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"header.coffeeCups"}
+  },
+  "header_param_non_default_encoding_valid_param_type_array_string": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamNonDefaultEncoding_ValidParamTypeArrayString",
+    "template": "/vending/drinks",
+    "parameter": {"name":"coffeeCups","in":"header","required":true,"schema":{"type":"array","items":{"type":"string"}}},
+    "request": {"method":"GET","path":"/vending/drinks","query_string":null,"headers":[["coffeecups","1,2,3,4,5"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "header_param_non_default_encoding_valid_param_type_array_number": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamNonDefaultEncoding_ValidParamTypeArrayNumber",
+    "template": "/vending/drinks",
+    "parameter": {"name":"coffeeCups","in":"header","required":true,"schema":{"type":"array","items":{"type":"number"}}},
+    "request": {"method":"GET","path":"/vending/drinks","query_string":null,"headers":[["coffeecups","1.22,2.33,3.44,4.55,5.66"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "header_param_non_default_encoding_valid_param_type_array_integer": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamNonDefaultEncoding_ValidParamTypeArrayInteger",
+    "template": "/vending/drinks",
+    "parameter": {"name":"coffeeCups","in":"header","required":true,"schema":{"type":"array","items":{"type":"integer"}}},
+    "request": {"method":"GET","path":"/vending/drinks","query_string":null,"headers":[["coffeecups","1,2,3,4,5"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "header_param_non_default_encoding_valid_param_type_array_bool": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamNonDefaultEncoding_ValidParamTypeArrayBool",
+    "template": "/vending/drinks",
+    "parameter": {"name":"coffeeCups","in":"header","required":true,"schema":{"type":"array","items":{"type":"boolean"}}},
+    "request": {"method":"GET","path":"/vending/drinks","query_string":null,"headers":[["coffeecups","true,false,true,false,true"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "header_param_non_default_encoding_invalid_param_type_array_number": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamNonDefaultEncoding_InvalidParamTypeArrayNumber",
+    "template": "/vending/drinks",
+    "parameter": {"name":"coffeeCups","in":"header","required":true,"schema":{"type":"array","items":{"type":"number"}}},
+    "request": {"method":"GET","path":"/vending/drinks","query_string":null,"headers":[["coffeecups","true,false,true,false,true"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"header.coffeeCups"}
+  },
+  "header_param_non_default_encoding_invalid_param_type_array_bool": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamNonDefaultEncoding_InvalidParamTypeArrayBool",
+    "template": "/vending/drinks",
+    "parameter": {"name":"coffeeCups","in":"header","required":true,"schema":{"type":"array","items":{"type":"boolean"}}},
+    "request": {"method":"GET","path":"/vending/drinks","query_string":null,"headers":[["coffeecups","1,false,2,true,5,false"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"header.coffeeCups"}
+  },
+  "header_param_string_valid_enum": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamStringValidEnum",
+    "template": "/vending/drinks",
+    "parameter": {"name":"coffeeCups","in":"header","required":true,"schema":{"type":"string","enum":["glass","china","thermos"]}},
+    "request": {"method":"GET","path":"/vending/drinks","query_string":null,"headers":[["coffeecups","glass"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "header_param_string_invalid_enum": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamStringInvalidEnum",
+    "template": "/vending/drinks",
+    "parameter": {"name":"coffeeCups","in":"header","required":true,"schema":{"type":"string","enum":["glass","china","thermos"]}},
+    "request": {"method":"GET","path":"/vending/drinks","query_string":null,"headers":[["coffeecups","microwave"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"header.coffeeCups"}
+  },
+  "header_param_integer_valid_enum": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamIntegerValidEnum",
+    "template": "/vending/drinks",
+    "parameter": {"name":"coffeeCups","in":"header","required":true,"schema":{"type":"integer","enum":[1,2,99]}},
+    "request": {"method":"GET","path":"/vending/drinks","query_string":null,"headers":[["coffeecups","2"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "header_param_number_invalid_enum": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamNumberInvalidEnum",
+    "template": "/vending/drinks",
+    "parameter": {"name":"coffeeCups","in":"header","required":true,"schema":{"type":"number","enum":[1.2,2.3,99.8]}},
+    "request": {"method":"GET","path":"/vending/drinks","query_string":null,"headers":[["coffeecups","1200.3"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"header.coffeeCups"}
+  },
+  "header_param_integer_invalid_enum": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamIntegerInvalidEnum",
+    "template": "/vending/drinks",
+    "parameter": {"name":"coffeeCups","in":"header","required":true,"schema":{"type":"integer","enum":[1,2,99]}},
+    "request": {"method":"GET","path":"/vending/drinks","query_string":null,"headers":[["coffeecups","1200"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"header.coffeeCups"}
+  },
+  "header_param_string_valid_pattern": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamStringValidPattern",
+    "template": "/burgers/beef",
+    "parameter": {"name":"X-Request-ID","in":"header","required":true,"schema":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["X-Request-ID","550e8400-e29b-41d4-a716-446655440000"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "header_param_string_invalid_pattern": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamStringInvalidPattern",
+    "template": "/burgers/beef",
+    "parameter": {"name":"X-Request-ID","in":"header","required":true,"schema":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["X-Request-ID","invalid_value"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"header.X-Request-ID"}
+  },
+  "header_param_string_valid_min_length": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamStringValidMinLength",
+    "template": "/burgers/beef",
+    "parameter": {"name":"X-Token","in":"header","required":true,"schema":{"type":"string","minLength":10}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["X-Token","abcdefghij"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "header_param_string_invalid_min_length": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamStringInvalidMinLength",
+    "template": "/burgers/beef",
+    "parameter": {"name":"X-Token","in":"header","required":true,"schema":{"type":"string","minLength":10}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["X-Token","short"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"header.X-Token"}
+  },
+  "header_param_string_valid_max_length": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamStringValidMaxLength",
+    "template": "/burgers/beef",
+    "parameter": {"name":"X-Token","in":"header","required":true,"schema":{"type":"string","maxLength":10}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["X-Token","short"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "header_param_string_invalid_max_length": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamStringInvalidMaxLength",
+    "template": "/burgers/beef",
+    "parameter": {"name":"X-Token","in":"header","required":true,"schema":{"type":"string","maxLength":10}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["X-Token","this-is-way-too-long"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"header.X-Token"}
+  },
+  "header_param_string_valid_pattern_and_min_max_length": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamStringValidPatternAndMinMaxLength",
+    "template": "/burgers/beef",
+    "parameter": {"name":"X-Code","in":"header","required":true,"schema":{"type":"string","pattern":"^[A-Z]+$","minLength":3,"maxLength":10}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["X-Code","ABCDEF"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "header_param_string_invalid_pattern_but_valid_length": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamStringInvalidPatternButValidLength",
+    "template": "/burgers/beef",
+    "parameter": {"name":"X-Code","in":"header","required":true,"schema":{"type":"string","pattern":"^[A-Z]+$","minLength":3,"maxLength":10}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["X-Code","abcdef"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"header.X-Code"}
+  },
+  "header_param_string_valid_enum_and_pattern": {
+    "source": "parameters/header_parameters_test.go::TestNewValidator_HeaderParamStringValidEnumAndPattern",
+    "template": "/burgers/beef",
+    "parameter": {"name":"X-Status","in":"header","required":true,"schema":{"type":"string","enum":["ACTIVE","INACTIVE","PENDING"]}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["X-Status","ACTIVE"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "cookie_no_path": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieNoPath",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"number"}},
+    "request": {"method":"GET","path":"/I/do/not/exist","query_string":null,"headers":[["Cookie","PattyPreference=1"]]},
+    "expected": {"valid":false,"error_kind":"path_not_found","error_path":"path"}
+  },
+  "cookie_param_number_valid": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamNumberValid",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"number"}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","PattyPreference=1"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "cookie_param_number_valid_float": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamNumberValidFloat",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"number"}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","PattyPreference=123.455"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "cookie_param_number_invalid": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamNumberInvalid",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"number"}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","PattyPreference=false"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"cookie.PattyPreference"}
+  },
+  "cookie_param_integer_valid": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamIntegerValid",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"integer"}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","PattyPreference=1"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "cookie_param_integer_invalid": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamIntegerInvalid",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"integer"}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","PattyPreference=false"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"cookie.PattyPreference"}
+  },
+  "cookie_param_boolean_valid": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamBooleanValid",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"boolean"}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","PattyPreference=true"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "cookie_param_enum_valid_string": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamEnumValidString",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"string","enum":["beef","chicken","pea protein"]}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","PattyPreference=chicken"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "cookie_param_enum_invalid_string": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamEnumInvalidString",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"string","enum":["beef","chicken","pea protein"]}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","PattyPreference=milk"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"cookie.PattyPreference"}
+  },
+  "cookie_param_boolean_invalid": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamBooleanInvalid",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"boolean"}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","PattyPreference=12345"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"cookie.PattyPreference"}
+  },
+  "cookie_param_object_valid": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamObjectValid",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"explode":false,"schema":{"type":"object","properties":{"pink":{"type":"boolean"},"number":{"type":"number"}},"required":["pink","number"]}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","PattyPreference=\"pink,true,number,2\""]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "cookie_param_object_invalid": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamObjectInvalid",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"explode":false,"schema":{"type":"object","properties":{"pink":{"type":"boolean"},"number":{"type":"number"}},"required":["pink","number"]}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","PattyPreference=\"pink,2,number,2\""]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"cookie.PattyPreference"}
+  },
+  "cookie_param_array_valid_number": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamArrayValidNumber",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"array","items":{"type":"number"}}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","PattyPreference=\"2,3,4\""]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "cookie_param_array_invalid_number": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamArrayInvalidNumber",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"array","items":{"type":"number"}}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","PattyPreference=\"2,true,4,'hello'\""]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"cookie.PattyPreference"}
+  },
+  "cookie_param_array_valid_integer": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamArrayValidInteger",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"array","items":{"type":"integer"}}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","PattyPreference=\"2,3,4\""]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "cookie_param_array_invalid_integer": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamArrayInvalidInteger",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"array","items":{"type":"integer"}}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","PattyPreference=\"2,true,4,'hello'\""]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"cookie.PattyPreference"}
+  },
+  "cookie_param_array_valid_boolean": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamArrayValidBoolean",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"array","items":{"type":"boolean"}}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","PattyPreference=\"true,false,true,false,true\""]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "cookie_param_array_string": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamArrayString",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"array","items":{"type":"string"}}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","PattyPreference=\"true,1,hey,ho\""]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "cookie_param_array_invalid_boolean": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamArrayInvalidBoolean",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"array","items":{"type":"boolean"}}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","PattyPreference=\"true,false,pb33f,false,99.99\""]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"cookie.PattyPreference"}
+  },
+  "cookie_param_array_invalid_boolean_zero_one": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamArrayInvalidBooleanZeroOne",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"array","items":{"type":"boolean"}}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","PattyPreference=\"true,false,0,false,1\""]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"cookie.PattyPreference"}
+  },
+  "cookie_param_array_valid_integer_enum": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamArrayValidIntegerEnum",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"integer","enum":[1,2,99]}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","PattyPreference=2"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "cookie_param_array_invalid_integer_enum": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamArrayInvalidIntegerEnum",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"integer","enum":[1,2,99]}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","PattyPreference=2500"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"cookie.PattyPreference"}
+  },
+  "cookie_param_array_valid_number_enum": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamArrayValidNumberEnum",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"number","enum":[1.2,2.3,99.0]}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","PattyPreference=2.3"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "cookie_param_array_invalid_number_enum": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamArrayInvalidNumberEnum",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"number","enum":[1.2,2.3,99.1]}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","PattyPreference=2500"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"cookie.PattyPreference"}
+  },
+  "cookie_required_missing": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieRequiredMissing",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"number"}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"missing_required_param","error_path":"cookie.PattyPreference"}
+  },
+  "cookie_optional_missing": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieOptionalMissing",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":false,"schema":{"type":"number"}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "cookie_optional_missing_no_required_field": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieOptionalMissingNoRequiredField",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","schema":{"type":"number"}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "cookie_case_sensitive": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieCaseSensitive",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"number"}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","pattypreference=1.5"]]},
+    "expected": {"valid":false,"error_kind":"missing_required_param","error_path":"cookie.PattyPreference"}
+  },
+  "cookie_required_with_invalid_value": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieRequiredWithInvalidValue",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyPreference","in":"cookie","required":true,"schema":{"type":"number"}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","PattyPreference=not-a-number"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"cookie.PattyPreference"}
+  },
+  "cookie_required_integer_missing": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieRequiredIntegerMissing",
+    "template": "/burgers/beef",
+    "parameter": {"name":"PattyCount","in":"cookie","required":true,"schema":{"type":"integer"}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"missing_required_param","error_path":"cookie.PattyCount"}
+  },
+  "cookie_required_boolean_missing": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieRequiredBooleanMissing",
+    "template": "/burgers/beef",
+    "parameter": {"name":"ExtraCheese","in":"cookie","required":true,"schema":{"type":"boolean"}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"missing_required_param","error_path":"cookie.ExtraCheese"}
+  },
+  "cookie_required_string_missing": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieRequiredStringMissing",
+    "template": "/burgers/beef",
+    "parameter": {"name":"CustomerName","in":"cookie","required":true,"schema":{"type":"string"}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"missing_required_param","error_path":"cookie.CustomerName"}
+  },
+  "cookie_required_array_missing": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieRequiredArrayMissing",
+    "template": "/burgers/beef",
+    "parameter": {"name":"Toppings","in":"cookie","required":true,"schema":{"type":"array","items":{"type":"string"}}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"missing_required_param","error_path":"cookie.Toppings"}
+  },
+  "cookie_required_object_missing": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieRequiredObjectMissing",
+    "template": "/burgers/beef",
+    "parameter": {"name":"Preferences","in":"cookie","required":true,"explode":false,"schema":{"type":"object","properties":{"pink":{"type":"boolean"},"number":{"type":"number"}}}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"missing_required_param","error_path":"cookie.Preferences"}
+  },
+  "cookie_param_string_valid_pattern": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamStringValidPattern",
+    "template": "/burgers/beef",
+    "parameter": {"name":"SessionID","in":"cookie","required":true,"schema":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","SessionID=550e8400-e29b-41d4-a716-446655440000"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "cookie_param_string_invalid_pattern": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamStringInvalidPattern",
+    "template": "/burgers/beef",
+    "parameter": {"name":"SessionID","in":"cookie","required":true,"schema":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","SessionID=invalid_value"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"cookie.SessionID"}
+  },
+  "cookie_param_string_valid_min_length": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamStringValidMinLength",
+    "template": "/burgers/beef",
+    "parameter": {"name":"Token","in":"cookie","required":true,"schema":{"type":"string","minLength":10}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","Token=abcdefghij"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "cookie_param_string_invalid_min_length": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamStringInvalidMinLength",
+    "template": "/burgers/beef",
+    "parameter": {"name":"Token","in":"cookie","required":true,"schema":{"type":"string","minLength":10}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","Token=short"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"cookie.Token"}
+  },
+  "cookie_param_string_valid_max_length": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamStringValidMaxLength",
+    "template": "/burgers/beef",
+    "parameter": {"name":"Token","in":"cookie","required":true,"schema":{"type":"string","maxLength":10}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","Token=short"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "cookie_param_string_invalid_max_length": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamStringInvalidMaxLength",
+    "template": "/burgers/beef",
+    "parameter": {"name":"Token","in":"cookie","required":true,"schema":{"type":"string","maxLength":10}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","Token=this-is-way-too-long"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"cookie.Token"}
+  },
+  "cookie_param_string_valid_pattern_and_min_max_length": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamStringValidPatternAndMinMaxLength",
+    "template": "/burgers/beef",
+    "parameter": {"name":"Code","in":"cookie","required":true,"schema":{"type":"string","pattern":"^[A-Z]+$","minLength":3,"maxLength":10}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","Code=ABCDEF"]]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "cookie_param_string_invalid_pattern_but_valid_length": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamStringInvalidPatternButValidLength",
+    "template": "/burgers/beef",
+    "parameter": {"name":"Code","in":"cookie","required":true,"schema":{"type":"string","pattern":"^[A-Z]+$","minLength":3,"maxLength":10}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[["Cookie","Code=abcdef"]]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"cookie.Code"}
+  },
+  "cookie_param_missing_required": {
+    "source": "parameters/cookie_parameters_test.go::TestNewValidator_CookieParamMissingRequired",
+    "template": "/burgers/beef",
+    "parameter": {"name":"session_id","in":"cookie","required":true,"schema":{"type":"string"}},
+    "request": {"method":"GET","path":"/burgers/beef","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"missing_required_param","error_path":"cookie.session_id"}
+  },
+  "simple_array_encoded_path": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_SimpleArrayEncodedPath",
+    "template": "/burgers/{burgerIds}/locate",
+    "parameter": {"name":"burgerIds","in":"path","schema":{"type":"array","items":{"type":"integer"}}},
+    "request": {"method":"PATCH","path":"/burgers/1,2,3,4,5/locate","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "path_param_url_encoding_integer_enum": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_PathParamURLEncoding_IntegerEnum",
+    "template": "/test/{numParam}",
+    "parameter": {"name":"numParam","in":"path","required":true,"schema":{"type":"integer","enum":[123,456]}},
+    "request": {"method":"GET","path":"/test/123","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "simple_array_encoded_path_invalid_integer": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_SimpleArrayEncodedPath_InvalidInteger",
+    "template": "/burgers/{burgerIds}/locate",
+    "parameter": {"name":"burgerIds","in":"path","schema":{"type":"array","items":{"type":"integer"}}},
+    "request": {"method":"GET","path":"/burgers/1,pizza,3,4,false/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerIds"}
+  },
+  "simple_array_encoded_path_invalid_number": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_SimpleArrayEncodedPath_InvalidNumber",
+    "template": "/burgers/{burgerIds}/locate",
+    "parameter": {"name":"burgerIds","in":"path","schema":{"type":"array","items":{"type":"number"}}},
+    "request": {"method":"GET","path":"/burgers/1,pizza,3,4,false/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerIds"}
+  },
+  "simple_array_encoded_path_invalid_bool": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_SimpleArrayEncodedPath_InvalidBool",
+    "template": "/burgers/{burgerIds}/locate",
+    "parameter": {"name":"burgerIds","in":"path","schema":{"type":"array","items":{"type":"boolean"}}},
+    "request": {"method":"GET","path":"/burgers/1,true,0,frogs,false/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerIds"}
+  },
+  "simple_object_encoded_path": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_SimpleObjectEncodedPath",
+    "template": "/burgers/{burger}/locate",
+    "parameter": {"name":"burger","in":"path","schema":{"type":"object","properties":{"id":{"type":"integer"},"vegetarian":{"type":"boolean"}}}},
+    "request": {"method":"GET","path":"/burgers/id,1234,vegetarian,true/locate","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "simple_object_encoded_path_invalid": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_SimpleObjectEncodedPath_Invalid",
+    "template": "/burgers/{burger}/locate",
+    "parameter": {"name":"burger","in":"path","schema":{"type":"object","properties":{"id":{"type":"integer"},"vegetarian":{"type":"boolean"}}}},
+    "request": {"method":"GET","path":"/burgers/id,hello,vegetarian,there/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burger"}
+  },
+  "simple_object_encoded_path_exploded": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_SimpleObjectEncodedPath_Exploded",
+    "template": "/burgers/{burger}/locate",
+    "parameter": {"name":"burger","in":"path","explode":true,"schema":{"type":"object","properties":{"id":{"type":"integer"},"vegetarian":{"type":"boolean"}}}},
+    "request": {"method":"GET","path":"/burgers/id=1234,vegetarian=true/locate","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "simple_object_encoded_path_exploded_invalid": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_SimpleObjectEncodedPath_ExplodedInvalid",
+    "template": "/burgers/{burger}/locate",
+    "parameter": {"name":"burger","in":"path","explode":true,"schema":{"type":"object","properties":{"id":{"type":"integer"},"vegetarian":{"type":"boolean"}}}},
+    "request": {"method":"GET","path":"/burgers/id=toast,vegetarian=chicken/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burger"}
+  },
+  "object_encoded_path": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_ObjectEncodedPath",
+    "template": "/burgers/{burger}/locate",
+    "parameter": {"name":"burger","in":"path","schema":{"type":"object","properties":{"id":{"type":"integer"},"vegetarian":{"type":"boolean"}}}},
+    "request": {"method":"GET","path":"/burgers/id,1234,vegetarian,true/locate","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "simple_encoded_path_invalid_integer": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_SimpleEncodedPath_InvalidInteger",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","schema":{"type":"integer"}},
+    "request": {"method":"GET","path":"/burgers/hello/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "simple_encoded_path_minimum_integer_violation": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_SimpleEncodedPath_MinimumIntegerViolation",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","schema":{"type":"integer","minimum":10}},
+    "request": {"method":"GET","path":"/burgers/1/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "simple_encoded_path_minimum_integer": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_SimpleEncodedPath_MinimumInteger",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","schema":{"type":"integer","minimum":10}},
+    "request": {"method":"GET","path":"/burgers/14/locate","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "simple_encoded_path_maximum_integer_violation": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_SimpleEncodedPath_MaximumIntegerViolation",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","schema":{"type":"integer","maximum":10}},
+    "request": {"method":"GET","path":"/burgers/11/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "simple_encoded_path_maximum_integer": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_SimpleEncodedPath_MaximumInteger",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","schema":{"type":"integer","maximum":10}},
+    "request": {"method":"GET","path":"/burgers/4/locate","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "simple_encoded_path_invalid_number": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_SimpleEncodedPath_InvalidNumber",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","schema":{"type":"number"}},
+    "request": {"method":"GET","path":"/burgers/hello/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "simple_encoded_path_minimum_number_violation": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_SimpleEncodedPath_MinimumNumberViolation",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","schema":{"type":"number","minimum":10.2}},
+    "request": {"method":"GET","path":"/burgers/1.3/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "simple_encoded_path_minimum_number": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_SimpleEncodedPath_MinimumNumber",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","schema":{"type":"number","minimum":10.3}},
+    "request": {"method":"GET","path":"/burgers/14.5/locate","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "simple_encoded_path_maximum_number_violation": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_SimpleEncodedPath_MaximumNumberViolation",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","schema":{"type":"number","maximum":10.2}},
+    "request": {"method":"GET","path":"/burgers/11.2/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "simple_encoded_path_maximum_number": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_SimpleEncodedPath_MaximumNumber",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","schema":{"type":"number","maximum":10.2}},
+    "request": {"method":"GET","path":"/burgers/4.5/locate","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "simple_encoded_path_invalid_boolean": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_SimpleEncodedPath_InvalidBoolean",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","schema":{"type":"boolean"}},
+    "request": {"method":"GET","path":"/burgers/hello/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "label_encoded_path_invalid_integer": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_LabelEncodedPath_InvalidInteger",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"label","schema":{"type":"integer"}},
+    "request": {"method":"GET","path":"/burgers/.hello/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "label_encoded_path_minimum_integer_violation": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_LabelEncodedPath_MinimumIntegerViolation",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"label","schema":{"type":"integer","minimum":10}},
+    "request": {"method":"GET","path":"/burgers/.3/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "label_encoded_path_maximum_integer_violation": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_LabelEncodedPath_MaximumIntegerViolation",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"label","schema":{"type":"integer","maximum":10}},
+    "request": {"method":"GET","path":"/burgers/.32/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "label_encoded_path_invalid_boolean": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_LabelEncodedPath_InvalidBoolean",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"label","schema":{"type":"boolean"}},
+    "request": {"method":"GET","path":"/burgers/.hello/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "label_encoded_path_valid_boolean": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_LabelEncodedPath_ValidBoolean",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"label","schema":{"type":"boolean"}},
+    "request": {"method":"GET","path":"/burgers/.true/locate","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "label_encoded_path_valid_array_integer": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_LabelEncodedPath_ValidArray_Integer",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"label","schema":{"type":"array","items":{"type":"integer"}}},
+    "request": {"method":"GET","path":"/burgers/.3,4/locate","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "label_encoded_path_valid_array_integer_exploded": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_LabelEncodedPath_ValidArray_Integer_Exploded",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"label","explode":true,"schema":{"type":"array","items":{"type":"integer"}}},
+    "request": {"method":"GET","path":"/burgers/.3.4/locate","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "label_encoded_path_invalid_array_integer_exploded": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_LabelEncodedPath_InvalidArray_Integer_Exploded",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"label","explode":true,"schema":{"type":"array","items":{"type":"integer"}}},
+    "request": {"method":"GET","path":"/burgers/.3.Not an_integer.5.6/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "label_encoded_path_invalid_array_integer": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_LabelEncodedPath_InvalidArray_Integer",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"label","schema":{"type":"array","items":{"type":"integer"}}},
+    "request": {"method":"GET","path":"/burgers/.3,4,Not an_integer,6/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "label_encoded_path_valid_array_number": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_LabelEncodedPath_ValidArray_Number",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"label","schema":{"type":"array","items":{"type":"number"}}},
+    "request": {"method":"GET","path":"/burgers/.3.4,5.6/locate","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "label_encoded_path_valid_array_number_exploded": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_LabelEncodedPath_ValidArray_Number_Exploded",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"label","explode":true,"schema":{"type":"array","items":{"type":"number"}}},
+    "request": {"method":"GET","path":"/burgers/.3.4.5.6/locate","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "label_encoded_path_invalid_array_number_exploded": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_LabelEncodedPath_InvalidArray_Number_Exploded",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"label","explode":true,"schema":{"type":"array","items":{"type":"number"}}},
+    "request": {"method":"GET","path":"/burgers/.3.Not a number.5.6/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "label_encoded_path_invalid_array_number": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_LabelEncodedPath_InvalidArray_Number",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"label","schema":{"type":"array","items":{"type":"number"}}},
+    "request": {"method":"GET","path":"/burgers/.3,4,Not a number,6/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "label_encoded_path_invalid_object": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_LabelEncodedPath_InvalidObject",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"label","schema":{"type":"object","properties":{"id":{"type":"integer"},"vegetarian":{"type":"boolean"}}}},
+    "request": {"method":"GET","path":"/burgers/.id,hello,vegetarian,why/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "label_encoded_path_invalid_object_exploded": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_LabelEncodedPath_InvalidObject_Exploded",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"label","explode":true,"schema":{"type":"object","properties":{"id":{"type":"integer"},"vegetarian":{"type":"boolean"}}}},
+    "request": {"method":"GET","path":"/burgers/.id=hello.vegetarian=why/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "matrix_encoded_path_valid_integer": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_MatrixEncodedPath_ValidInteger",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"matrix","schema":{"type":"integer"}},
+    "request": {"method":"GET","path":"/burgers/;burgerId=5/locate","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "matrix_encoded_path_invalid_integer": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_MatrixEncodedPath_InvalidInteger",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"matrix","schema":{"type":"integer"}},
+    "request": {"method":"GET","path":"/burgers/;burgerId=I am not a number/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "matrix_encoded_path_minimum_integer_violation": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_MatrixEncodedPath_MinimumIntegerViolation",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"matrix","schema":{"type":"integer","minimum":5}},
+    "request": {"method":"GET","path":"/burgers/;burgerId=3/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "matrix_encoded_path_maximum_integer_violation": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_MatrixEncodedPath_MaximumIntegerViolation",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"matrix","schema":{"type":"integer","maximum":5}},
+    "request": {"method":"GET","path":"/burgers/;burgerId=30/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "matrix_encoded_path_invalid_number": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_MatrixEncodedPath_InvalidNumber",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"matrix","schema":{"type":"number"}},
+    "request": {"method":"GET","path":"/burgers/;burgerId=I am not a number/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "matrix_encoded_path_minimum_number_violation": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_MatrixEncodedPath_MinimumNumberViolation",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"matrix","schema":{"type":"number","minimum":5}},
+    "request": {"method":"GET","path":"/burgers/;burgerId=3/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "matrix_encoded_path_maximum_number_violation": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_MatrixEncodedPath_MaximumNumberViolation",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"matrix","schema":{"type":"number","maximum":5}},
+    "request": {"method":"GET","path":"/burgers/;burgerId=30/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "matrix_encoded_path_valid_primitive_boolean": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_MatrixEncodedPath_ValidPrimitiveBoolean",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"matrix","schema":{"type":"boolean"}},
+    "request": {"method":"GET","path":"/burgers/;burgerId=false/locate","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "matrix_encoded_path_invalid_primitive_boolean": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_MatrixEncodedPath_InvalidPrimitiveBoolean",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"matrix","schema":{"type":"boolean"}},
+    "request": {"method":"GET","path":"/burgers/;burgerId=I am also not a bool/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "matrix_encoded_path_valid_object": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_MatrixEncodedPath_ValidObject",
+    "template": "/burgers/{burger}/locate",
+    "parameter": {"name":"burger","in":"path","style":"matrix","schema":{"type":"object","properties":{"id":{"type":"integer"},"vegetarian":{"type":"boolean"}}}},
+    "request": {"method":"GET","path":"/burgers/;burger=id,1234,vegetarian,false/locate","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "matrix_encoded_path_invalid_object": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_MatrixEncodedPath_InvalidObject",
+    "template": "/burgers/{burger}/locate",
+    "parameter": {"name":"burger","in":"path","style":"matrix","schema":{"type":"object","properties":{"id":{"type":"integer"},"vegetarian":{"type":"boolean"}}}},
+    "request": {"method":"GET","path":"/burgers/;burger=id,1234,vegetarian,I am not a bool/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burger"}
+  },
+  "matrix_encoded_path_valid_object_exploded": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_MatrixEncodedPath_ValidObject_Exploded",
+    "template": "/burgers/{burger}/locate",
+    "parameter": {"name":"burger","in":"path","style":"matrix","explode":true,"schema":{"type":"object","properties":{"id":{"type":"integer"},"vegetarian":{"type":"boolean"}}}},
+    "request": {"method":"GET","path":"/burgers/;id=1234;vegetarian=false/locate","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "matrix_encoded_path_invalid_object_exploded": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_MatrixEncodedPath_InvalidObject_Exploded",
+    "template": "/burgers/{burger}/locate",
+    "parameter": {"name":"burger","in":"path","style":"matrix","explode":true,"schema":{"type":"object","properties":{"id":{"type":"integer"},"vegetarian":{"type":"boolean"}}}},
+    "request": {"method":"GET","path":"/burgers/;id=1234;vegetarian=I am not a boolean/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burger"}
+  },
+  "matrix_encoded_path_valid_array": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_MatrixEncodedPath_ValidArray",
+    "template": "/burgers/{burger}/locate",
+    "parameter": {"name":"burger","in":"path","style":"matrix","schema":{"type":"array","items":{"type":"integer"}}},
+    "request": {"method":"GET","path":"/burgers/;burger=1,2,3,4,5/locate","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "matrix_encoded_path_invalid_array": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_MatrixEncodedPath_InvalidArray",
+    "template": "/burgers/{burger}/locate",
+    "parameter": {"name":"burger","in":"path","style":"matrix","schema":{"type":"array","items":{"type":"integer"}}},
+    "request": {"method":"GET","path":"/burgers/;burger=1,2,not a number,4,false/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burger"}
+  },
+  "matrix_encoded_path_valid_array_exploded": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_MatrixEncodedPath_ValidArray_Exploded",
+    "template": "/burgers/{burger}/locate",
+    "parameter": {"name":"burger","in":"path","style":"matrix","explode":true,"schema":{"type":"array","items":{"type":"integer"}}},
+    "request": {"method":"GET","path":"/burgers/;burger=1;burger=2;burger=3/locate","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "matrix_encoded_path_invalid_array_exploded": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_MatrixEncodedPath_InvalidArray_Exploded",
+    "template": "/burgers/{burger}/locate",
+    "parameter": {"name":"burger","in":"path","style":"matrix","explode":true,"schema":{"type":"array","items":{"type":"integer"}}},
+    "request": {"method":"GET","path":"/burgers/;burger=1;burger=I am not an int;burger=3/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burger"}
+  },
+  "path_params_path_not_found": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_PathParams_PathNotFound",
+    "template": "/burgers/{burger}/locate",
+    "parameter": {"name":"burger","in":"path","style":"matrix","explode":true,"schema":{"type":"array","items":{"type":"integer"}}},
+    "request": {"method":"GET","path":"/I do not exist","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"path_not_found","error_path":"path"}
+  },
+  "path_param_string_enum_valid": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_PathParamStringEnumValid",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","schema":{"type":"string","enum":["bigMac","whopper","mcCrispy"]}},
+    "request": {"method":"GET","path":"/burgers/bigMac/locate","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "path_param_string_enum_invalid": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_PathParamStringEnumInvalid",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","schema":{"type":"string","enum":["bigMac","whopper","mcCrispy"]}},
+    "request": {"method":"GET","path":"/burgers/hello/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "path_param_string_min_length_violation": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_PathParamStringMinLengthViolation",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","schema":{"type":"string","minLength":4}},
+    "request": {"method":"GET","path":"/burgers/big/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "path_param_string_max_length_violation": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_PathParamStringMaxLengthViolation",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","schema":{"type":"string","maxLength":1}},
+    "request": {"method":"GET","path":"/burgers/big/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "path_param_integer_enum_valid": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_PathParamIntegerEnumValid",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","schema":{"type":"integer","enum":[1,2,99,100]}},
+    "request": {"method":"GET","path":"/burgers/2/locate","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "path_param_integer_enum_invalid": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_PathParamIntegerEnumInvalid",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","schema":{"type":"integer","enum":[1,2,99,100]}},
+    "request": {"method":"GET","path":"/burgers/3284/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "path_param_number_enum_valid": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_PathParamNumberEnumValid",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","schema":{"type":"number","enum":[1,2,99,100]}},
+    "request": {"method":"GET","path":"/burgers/2/locate","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "path_param_number_enum_invalid": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_PathParamNumberEnumInvalid",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","schema":{"type":"number","enum":[1,2,99,100]}},
+    "request": {"method":"GET","path":"/burgers/3284/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "path_label_eum_valid": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_PathLabelEumValid",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"label","schema":{"type":"number","enum":[1,2,99,100]}},
+    "request": {"method":"GET","path":"/burgers/.2/locate","query_string":null,"headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  },
+  "path_label_eum_invalid": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_PathLabelEumInvalid",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"label","schema":{"type":"number","enum":[1,2,99,100]}},
+    "request": {"method":"GET","path":"/burgers/.22334/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "path_matrix_eum_invalid": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_PathMatrixEumInvalid",
+    "template": "/burgers/{burgerId}/locate",
+    "parameter": {"name":"burgerId","in":"path","style":"matrix","schema":{"type":"number","enum":[1,2,99,100]}},
+    "request": {"method":"GET","path":"/burgers/;burgerId=22334/locate","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"path.burgerId"}
+  },
+  "mandatory_path_segment_empty": {
+    "source": "parameters/path_parameters_test.go::TestNewValidator_MandatoryPathSegmentEmpty",
+    "template": "/burgers/{burger}",
+    "parameter": {"name":"burger","in":"path","required":true,"schema":{"type":"string"}},
+    "request": {"method":"GET","path":"/burgers/","query_string":null,"headers":[]},
+    "expected": {"valid":false,"error_kind":"path_not_found","error_path":"path"}
+  },
+  "query_array_max_items": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_CheckQueryParamsMaxItems",
+    "template": "/items",
+    "parameter": {"name":"id","in":"query","required":true,"style":"form","explode":false,"schema":{"type":"array","items":{"type":"integer"},"maxItems":10}},
+    "request": {"method":"GET","path":"/items","query_string":"id=1,2,3,4,5,6,7,8,9,10,11,12","headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"query.id"}
+  },
+  "query_array_min_items": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_CheckQueryParamsMinItems",
+    "template": "/items",
+    "parameter": {"name":"id","in":"query","required":true,"style":"form","explode":false,"schema":{"type":"array","items":{"type":"integer"},"minItems":10}},
+    "request": {"method":"GET","path":"/items","query_string":"id=1,2,3","headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"query.id"}
+  },
+  "query_array_unique_items": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_CheckQueryParamsUniqueItems",
+    "template": "/items",
+    "parameter": {"name":"id","in":"query","required":true,"style":"form","explode":false,"schema":{"type":"array","items":{"type":"string"},"uniqueItems":true}},
+    "request": {"method":"GET","path":"/items","query_string":"id=cake,cake,meat,potatoes,eggs,meat","headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"query.id"}
+  },
+  "query_deep_object_invalid_leaf": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamValidateStyle_DeepObjectMultiValuesFailedSchema",
+    "template": "/a/fishy/on/a/dishy",
+    "parameter": {"name":"fishy","in":"query","required":true,"style":"deepObject","schema":{"type":"object","properties":{"ocean":{"type":"string"},"salt":{"type":"boolean"}},"required":["ocean","salt"]}},
+    "request": {"method":"GET","path":"/a/fishy/on/a/dishy","query_string":"fishy[ocean]=atlantic&fishy[salt]=12","headers":[]},
+    "expected": {"valid":false,"error_kind":"invalid_param_value","error_path":"query.fishy"}
+  },
+  "query_nested_deep_object": {
+    "source": "parameters/query_parameters_test.go::TestNewValidator_QueryParamValidateStyle_NestedDeepObject",
+    "template": "/path",
+    "parameter": {"name":"obj","in":"query","style":"deepObject","schema":{"type":"object","properties":{"root":{"type":"string"},"nested":{"type":"object","properties":{"child":{"type":"string"}}}}},"required":true},
+    "request": {"method":"GET","path":"/path","query_string":"obj[root]=test1&obj[nested][child]=test2","headers":[]},
+    "expected": {"valid":true,"error_kind":null,"error_path":null}
+  }
+}

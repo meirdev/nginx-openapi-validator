@@ -90,7 +90,6 @@ pub fn validate_request(
         param_validator::validate_query_params(
             &query_pairs,
             &operation.query_params,
-            "query",
             root,
             &mut errors,
         );
@@ -98,7 +97,11 @@ pub fn validate_request(
         // Disallow additional query params not in spec
         if parts.disallow_additional_query_params {
             for (key, _) in &query_pairs {
-                if !operation.query_params.iter().any(|p| &p.name == key) {
+                if !operation
+                    .query_params
+                    .iter()
+                    .any(|p| param_validator::query_key_belongs_to(key, p, root))
+                {
                     errors.push(ValidationError {
                         kind: ValidationErrorKind::InvalidParamValue,
                         message: format!(
@@ -125,10 +128,9 @@ pub fn validate_request(
     // 6. Cookie parameter validation
     if parts.cookie_params {
         let cookie_pairs = extract_cookies(&request.headers);
-        param_validator::validate_query_params(
+        param_validator::validate_cookie_params(
             &cookie_pairs,
             &operation.cookie_params,
-            "cookie",
             root,
             &mut errors,
         );
@@ -136,7 +138,12 @@ pub fn validate_request(
 
     // 7 & 8. Content-Type and Body validation
     if let Some(ref req_body) = operation.request_body {
-        if parts.content_type {
+        // A request that carries no body has nothing for Content-Type to
+        // describe, so the header is only demanded when a body is present or
+        // required.
+        let has_body = request.body.as_deref().is_some_and(|b| !b.is_empty());
+
+        if parts.content_type && (has_body || req_body.required) {
             let expected: Vec<&mime::Mime> = req_body.media_types().collect();
             content_type::validate_content_type(request.content_type(), &expected, &mut errors);
         }

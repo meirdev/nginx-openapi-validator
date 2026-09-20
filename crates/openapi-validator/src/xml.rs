@@ -22,13 +22,32 @@ pub fn decode(
     let text = std::str::from_utf8(raw).map_err(|_| {
         vec![invalid_body("XML body is not valid UTF-8".to_string())]
     })?;
-    let doc = Document::parse(text)
-        .map_err(|e| vec![invalid_body(format!("Failed to parse request body as XML: {e}"))])?;
+    // A body made of several top-level elements (a fragment) is accepted by
+    // wrapping it in a synthetic root, which then plays the object's role.
+    let wrapped;
+    let mut is_fragment = false;
+    let doc = match Document::parse(text) {
+        Ok(doc) => doc,
+        Err(error) => {
+            wrapped = format!("<fragment>{text}</fragment>");
+            match Document::parse(&wrapped) {
+                Ok(doc) if doc.root_element().children().any(|c| c.is_element()) => {
+                    is_fragment = true;
+                    doc
+                }
+                _ => {
+                    return Err(vec![invalid_body(format!(
+                        "Failed to parse request body as XML: {error}"
+                    ))])
+                }
+            }
+        }
+    };
 
     let schema = media.and_then(|m| m.schema.as_ref()).map(|s| deref(root, s));
     let element = doc.root_element();
 
-    if let Some(xml) = schema.and_then(|s| s.get("xml")) {
+    if let (false, Some(xml)) = (is_fragment, schema.and_then(|s| s.get("xml"))) {
         if !namespace_matches(element, xml) {
             return Err(vec![ValidationError {
                 kind: ValidationErrorKind::SchemaValidation,

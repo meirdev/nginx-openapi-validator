@@ -49,13 +49,59 @@ pub struct CompiledOperation {
     pub request_body: Option<CompiledRequestBody>,
 }
 
+/// Where a parameter is carried in the request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParamLocation {
+    Path,
+    Query,
+    Header,
+    Cookie,
+}
+
+/// OpenAPI parameter serialization style.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParamStyle {
+    Form,
+    Simple,
+    Label,
+    Matrix,
+    SpaceDelimited,
+    PipeDelimited,
+    DeepObject,
+}
+
+impl ParamStyle {
+    fn parse(name: Option<&str>, location: ParamLocation) -> Result<Self, SpecError> {
+        Ok(match name {
+            None => match location {
+                ParamLocation::Query | ParamLocation::Cookie => Self::Form,
+                ParamLocation::Path | ParamLocation::Header => Self::Simple,
+            },
+            Some("form") => Self::Form,
+            Some("simple") => Self::Simple,
+            Some("label") => Self::Label,
+            Some("matrix") => Self::Matrix,
+            Some("spaceDelimited") => Self::SpaceDelimited,
+            Some("pipeDelimited") => Self::PipeDelimited,
+            Some("deepObject") => Self::DeepObject,
+            Some(other) => {
+                return Err(SpecError::ParseError(format!(
+                    "unknown parameter style '{other}'"
+                )))
+            }
+        })
+    }
+}
+
 pub struct CompiledParam {
     pub name: String,
+    pub location: ParamLocation,
     pub required: bool,
-    /// Whether array values arrive as repeated keys (`a=1&a=2`) rather than
-    /// a single comma-separated value (`a=1,2`). Defaults per OpenAPI: true
-    /// for query and cookie parameters, false for path and header parameters.
-    pub explode: bool,
+    pub style: ParamStyle,
+    /// The `explode` flag as written in the document. `None` means it was
+    /// omitted; decoders apply the OpenAPI default for the style, with the
+    /// leniency the reference implementation shows for omitted values.
+    pub explode: Option<bool>,
     /// The parameter's schema as written in the document (may be a `$ref`),
     /// used to coerce the raw string value into the declared type.
     pub schema: Option<Value>,
@@ -385,17 +431,11 @@ fn compile_document(mut doc: Value) -> Result<CompiledSpec, SpecError> {
                     continue;
                 }
                 let compiled = compile_param(&document, param)?;
-                match param.location.as_str() {
-                    "path" => path_params.push(compiled),
-                    "query" => query_params.push(compiled),
-                    "header" => header_params.push(compiled),
-                    "cookie" => cookie_params.push(compiled),
-                    other => {
-                        return Err(SpecError::ParseError(format!(
-                            "parameter '{}' has unknown location '{other}'",
-                            param.name
-                        )))
-                    }
+                match compiled.location {
+                    ParamLocation::Path => path_params.push(compiled),
+                    ParamLocation::Query => query_params.push(compiled),
+                    ParamLocation::Header => header_params.push(compiled),
+                    ParamLocation::Cookie => cookie_params.push(compiled),
                 }
             }
 
@@ -491,22 +531,32 @@ fn compile_param(document: &Document, param: &ParamNode) -> Result<CompiledParam
         None => (None, None),
     };
 
-    let is_form_style = matches!(param.location.as_str(), "query" | "cookie");
-    let explode = param
-        .value
-        .get("explode")
-        .and_then(Value::as_bool)
-        .unwrap_or(is_form_style);
+    let location = match param.location.as_str() {
+        "path" => ParamLocation::Path,
+        "query" => ParamLocation::Query,
+        "header" => ParamLocation::Header,
+        "cookie" => ParamLocation::Cookie,
+        other => {
+            return Err(SpecError::ParseError(format!(
+                "parameter '{}' has unknown location '{other}'",
+                param.name
+            )))
+        }
+    };
+    let style = ParamStyle::parse(param.value.get("style").and_then(Value::as_str), location)?;
+    let explode = param.value.get("explode").and_then(Value::as_bool);
 
     let required = param
         .value
         .get("required")
         .and_then(Value::as_bool)
-        .unwrap_or(param.location == "path");
+        .unwrap_or(location == ParamLocation::Path);
 
     Ok(CompiledParam {
         name: param.name.clone(),
+        location,
         required,
+        style,
         explode,
         schema,
         schema_validator,

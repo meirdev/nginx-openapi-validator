@@ -1,7 +1,7 @@
-# Schema validation parity tests
+# Request and schema validation parity tests
 
 These integration tests adapt request-relevant cases from the local
-`libopenapi-validator/schema_validation` checkout at commit
+`libopenapi-validator` checkout (`schema_validation`, `requests`, and `parameters`) at commit
 `f309f59bdf6b385a965a86efa1faa63356af4e77`. The original checkout was
 `/Users/meirelbaz/Code/libopenapi-validator`; it is **not needed to run the tests**.
 The upstream MIT license is preserved in
@@ -23,11 +23,34 @@ Run one group or one case:
 ```sh
 cargo test -p openapi-validator --test schema_validation_openapi
 cargo test -p openapi-validator --test schema_validation one_of_multiple_matches_issue520
+cargo test -p openapi-validator --test request_body
+cargo test -p openapi-validator --test request_parameters query_nested_deep_object
 ```
 
 ## Status
 
-All **87 integration tests pass**. The initial port ran 58 pass / 29 fail;
+All **327 integration tests and 83 unit tests pass**. The expanded suite
+initially ran 296 pass / 31 fail; the mismatches and how they were closed:
+
+| Area | Fix |
+| --- | --- |
+| Optional body without `Content-Type` | The header is only demanded when a body is present or required. |
+| XML fragment (several top-level elements) | The decoder wraps the body in a synthetic root when the document has no single root, matching the reference. |
+| Empty optional XML body | An explicitly present but empty XML body is `InvalidBody`; an absent optional body stays valid. |
+| Cookie arrays/objects | Cookie values are unquoted and decoded with `form` rules (`a,b,c` arrays, `k,v,k,v` objects). |
+| Header objects | `simple` objects decode as `k,v,k,v`, or `k=v,k=v` when exploded. Odd part counts or missing `=` are left as strings so the type check fails. |
+| Simple, label and matrix path values | `param_validator.rs` decodes each style, including exploded label (`.a.b`) and matrix (`;k=v;k=v`) forms, before coercion. |
+| Pipe- and space-delimited queries | The style delimiter is honoured for arrays and non-exploded objects. |
+| deepObject queries | Bracketed keys (`obj[nested][child]=v`) build the object; strict mode counts them as declared. |
+| Query array explode conventions | Omitted `explode` accepts both repeated keys and comma lists. An explicit `explode: true` rejects a comma-separated value as a serialization error, as the reference does. |
+
+The three compatibility decisions the initial comparison called out (XML
+fragments, empty optional XML, query explode) were resolved in favour of the
+reference behavior so the parity suite is the contract.
+
+## Original schema-test fixes
+
+All **87 original integration tests pass**. The initial port ran 58 pass / 29 fail;
 the gaps and how they were closed:
 
 | Test file | What the failures exposed | Fix |
@@ -56,9 +79,43 @@ semantics needed adaptation.
 | `directional_schema_test.go` | Request-direction required properties, empty required list after removing readOnly fields, tuple `prefixItems` |
 | `validate_urlencoded_test.go` | All 14 `TestComplexBodies` payloads and the exact media schema/encoding fixture, basic object, malformed URL encoding, malformed JSON-encoded field |
 | `validate_xml_test.go` | Basic XML name (issue 346), empty/malformed XML, attributes, integer types, wrapped/unwrapped arrays, custom property names, required/optional fields, whitespace/empty elements, property mismatch, attribute mismatch, primitive value, incorrect wrapped item name, nested objects, mixed attributes/elements, scalar coercion, SOAP, float precision, nullable annotation, no properties, namespace/prefix checks at root and nested object/array properties |
+| `requests/validate_body_test.go` | Request presence, routing/method errors, content types, wildcard matching, compositions and limits, missing schemas, issue75/issue146, form/XML body validation, malformed JSON, body replacement, nonfinite form numbers |
+| `requests/validate_request_test.go` | OpenAPI 3.0 boolean versus 3.1 numeric exclusive minimum, nested and allOf readOnly handling, required/optional empty-body behavior |
+| `requests/kin_parity_test.go` | Vendor JSON and legacy malformed JSON requests |
+| `parameters/query_parameters_test.go` | Scalar and array values, numeric/string bounds, enums, repeated keys, explode, pipe-delimited objects/arrays, deepObject, array length/uniqueness, strict query policy, HTTP methods |
+| `parameters/header_parameters_test.go` | Required headers, case-insensitive names, primitive types, arrays and objects, enums, patterns, string lengths |
+| `parameters/cookie_parameters_test.go` | Required/optional cookies, case-sensitive names, primitive types, arrays and objects, enums, patterns, string lengths |
+| `parameters/path_parameters_test.go` | Simple/label/matrix primitives, arrays and objects, numeric bounds, enums, string lengths, empty segments and absent paths |
 
 Adaptations:
 
+- New parameter cases have a `source` field in
+  `fixtures/request_parameters.json` naming the exact upstream function. The
+  expected validity comes from its assertion, even when the Go function name
+  says "Invalid" but asserts success. Every fixture has its own Rust test;
+  failures include the upstream source name. The two strict-query tests are
+  inline because they contain two parameters and enable a configuration flag.
+- `fixtures/request_body_specs.json` preserves the selected Go schemas as JSON,
+  including their `#/components/schema_validation/...` references. Missing info
+  and response descriptions are supplied, and empty YAML operation maps become
+  JSON objects. Related body cases share these schemas and keep their payloads
+  visible in `request_body.rs`.
+- Path parameter fixtures normalize Go's URI-template extensions `{name*}`,
+  `{.name}`, and `{;name}` to OpenAPI `{name}`. The actual request segment and
+  parameter `style`/`explode` are unchanged, so tests exercise serialization
+  rather than mismatched captured parameter names. Path-level parameters are
+  mounted on the tested operation; inheritance/override behavior is not covered
+  by these cases. Paths are decoded; query strings keep their wire encoding.
+- Cookie validation is explicitly enabled. Go `AddCookie` values containing
+  spaces or commas are quoted in the corresponding raw `Cookie` header.
+  Go strict-query mode maps to `disallow_additional_query_params`.
+- The new body cases run twice against the same compiled spec and request, and
+  check that request bytes remain intact. Go stream reads, `GetBody` replay,
+  stale stream identities, and read failures do not exist for `RequestData`.
+  The replacement test checks changing actual bytes on a reused request instead.
+- Added controls are labeled: bounds, valid/invalid anyOf payloads for issue75,
+  required fields after readOnly pruning, and invalid vendor JSON. Form `NaN`
+  is rejected as a schema type mismatch rather than Go's serialization error.
 - Upstream YAML schemas are expressed as JSON, with the title, version, response
   description, and request wrapper required by our public API. Response-located
   XML schemas are mounted as request-body schemas; this does not test response
@@ -102,3 +159,11 @@ represented as passing parity claims:
   helpers return structures or classifications not exposed by our request API.
   Their behavior is exercised through body-validation cases where applicable;
   form `TestComplexBodies` is complete.
+- `requests/request_body_test.go` only tests Go validator/cache release. Rust
+  ownership has no equivalent public `Release` operation, so it was not copied.
+- The new request suites do not emulate custom decoder registration, optional
+  standard/ZIP codecs, body strict mode, format-assertion options, undeclared-body
+  rejection, or Go cache internals where our API has no matching configuration.
+  Format-specific parameter cases, security, parameter `content` schemas,
+  external-file references, server URL prefix routing, and OData path templates
+  are outside this expansion. This is not an exhaustive port of every Go test.
