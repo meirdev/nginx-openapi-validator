@@ -1,0 +1,3 @@
+[workspace]
+resolver = "2"
+members = ["crates/openapi-validator", "crates/ngx-oav-module"]

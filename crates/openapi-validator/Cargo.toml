@@ -1,0 +1,17 @@
+[package]
+name = "openapi-validator"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+oas3 = { version = "0.20" }
+jsonschema = "0.28"
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+form_urlencoded = "1"
+rustc-hash = "2"
+thiserror = "2"
+log = "0.4"
+
+[dev-dependencies]
+pretty_assertions = "1"

@@ -1,0 +1,18 @@
+[package]
+name = "ngx-oav-module"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+default = ["export-modules"]
+export-modules = []
+
+[dependencies]
+ngx = { version = "0.5", default-features = false, features = ["std", "vendored"] }
+once_cell = "1"
+openapi-validator = { path = "../openapi-validator" }
+oas3 = { version = "0.20" }
+serde_json = "1"

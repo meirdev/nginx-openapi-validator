@@ -1,0 +1,14 @@
+services:
+  nginx:
+    build:
+      context: ..
+      dockerfile: example/Dockerfile
+    ports:
+      - "18088:80"
+    depends_on:
+      - backend
+
+  # Simple echo backend that returns 200 for any request
+  backend:
+    image: hashicorp/http-echo
+    command: ["-text", '{"ok": true}', "-listen", ":5678"]
