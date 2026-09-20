@@ -1,25 +1,30 @@
 use std::collections::HashMap;
 
 use jsonschema::Validator;
+use matchit::Router;
 
 use crate::error::{SpecError, ValidationError, ValidationErrorKind};
-use crate::path_matcher::PathTree;
 
 /// Pre-compiled OpenAPI spec optimized for per-request validation.
 pub struct CompiledSpec {
-    /// Trie-based path matcher for O(n) lookup.
-    pub path_tree: PathTree,
-    /// Operations keyed by (template, uppercase method).
-    pub operations: HashMap<String, HashMap<String, CompiledOperation>>,
+    /// Radix-tree router from request path to the route's compiled operations.
+    router: Router<CompiledRoute>,
 }
 
 impl Default for CompiledSpec {
     fn default() -> Self {
         Self {
-            path_tree: PathTree::default(),
-            operations: HashMap::new(),
+            router: Router::new(),
         }
     }
+}
+
+/// Everything compiled for a single OpenAPI path template.
+pub struct CompiledRoute {
+    /// The original OpenAPI path template, e.g. `/users/{id}`.
+    pub template: String,
+    /// Operations keyed by uppercase HTTP method.
+    pub operations: HashMap<String, CompiledOperation>,
 }
 
 pub struct CompiledOperation {
@@ -107,40 +112,29 @@ impl Default for ValidationConfig {
 
 /// Result of matching a request path against the compiled spec.
 pub struct MatchedRoute<'a> {
+    /// The OpenAPI path template that matched.
     pub template: &'a str,
+    /// Captured path parameter name-value pairs, in template order.
     pub params: Vec<(&'a str, &'a str)>,
+    route: &'a CompiledRoute,
 }
 
-impl CompiledSpec {
-    /// Find a route matching the given path.
-    pub fn match_route<'a>(&'a self, request_path: &'a str) -> Option<MatchedRoute<'a>> {
-        let m = self.path_tree.match_path(request_path)?;
-        Some(MatchedRoute {
-            template: m.template,
-            params: m.params,
-        })
-    }
-
-    /// Check if a method is allowed for a matched route.
-    pub fn check_method<'a>(
-        &'a self,
-        template: &str,
-        method: &str,
-    ) -> Result<&'a CompiledOperation, ValidationError> {
-        let methods = self.operations.get(template).ok_or_else(|| ValidationError {
-            kind: ValidationErrorKind::PathNotFound,
-            message: format!("No operations found for path '{template}'"),
-            path: "path".to_string(),
-        })?;
-
-        methods
+impl<'a> MatchedRoute<'a> {
+    /// Look up the operation for an HTTP method on this route.
+    pub fn check_method(&self, method: &str) -> Result<&'a CompiledOperation, ValidationError> {
+        self.route
+            .operations
             .get(&method.to_ascii_uppercase())
             .ok_or_else(|| {
-                let allowed: Vec<&String> = methods.keys().collect();
+                let mut allowed: Vec<&str> =
+                    self.route.operations.keys().map(String::as_str).collect();
+                allowed.sort_unstable();
                 ValidationError {
                     kind: ValidationErrorKind::MethodNotAllowed,
                     message: format!(
-                        "Method '{method}' is not allowed for path '{template}'. Allowed: {allowed:?}",
+                        "Method '{method}' is not allowed for path '{}'. Allowed: {}",
+                        self.template,
+                        allowed.join(", ")
                     ),
                     path: "method".to_string(),
                 }
@@ -148,19 +142,49 @@ impl CompiledSpec {
     }
 }
 
+impl CompiledSpec {
+    /// Parse an OpenAPI 3.x document from JSON text and compile it.
+    ///
+    /// This is the entry point for callers that do not want to depend on the
+    /// underlying OpenAPI parser crate.
+    pub fn from_json(json: &str) -> Result<Self, SpecError> {
+        let spec = oas3::from_json(json).map_err(|e| SpecError::ParseError(e.to_string()))?;
+        compile_spec(&spec)
+    }
+
+    /// Find a route matching the given request path.
+    ///
+    /// The path must already be percent-decoded and must not contain the query
+    /// string. A trailing slash is ignored, so `/users/` matches `/users`.
+    pub fn match_route<'a>(&'a self, request_path: &'a str) -> Option<MatchedRoute<'a>> {
+        let m = self.router.at(normalize_path(request_path)).ok()?;
+        Some(MatchedRoute {
+            template: m.value.template.as_str(),
+            params: m.params.iter().collect(),
+            route: m.value,
+        })
+    }
+}
+
+/// Strip trailing slashes so templates and request paths compare consistently.
+fn normalize_path(path: &str) -> &str {
+    let trimmed = path.trim_end_matches('/');
+    if trimmed.is_empty() {
+        "/"
+    } else {
+        trimmed
+    }
+}
+
 /// Compile an oas3::Spec into a CompiledSpec for fast per-request validation.
 pub fn compile_spec(spec: &oas3::Spec) -> Result<CompiledSpec, SpecError> {
-    let paths = match &spec.paths {
-        Some(paths) => paths,
-        None => return Ok(CompiledSpec::default()),
+    let mut router = Router::new();
+
+    let Some(paths) = &spec.paths else {
+        return Ok(CompiledSpec { router });
     };
 
-    let mut path_tree = PathTree::default();
-    let mut operations: HashMap<String, HashMap<String, CompiledOperation>> = HashMap::new();
-
     for (path_template, path_item) in paths {
-        path_tree.insert(path_template)?;
-
         // Collect path-level parameters
         let path_level_params: Vec<oas3::spec::Parameter> = path_item
             .parameters
@@ -168,11 +192,9 @@ pub fn compile_spec(spec: &oas3::Spec) -> Result<CompiledSpec, SpecError> {
             .filter_map(|p| resolve_param(p, spec))
             .collect();
 
-        let mut route_operations = HashMap::new();
+        let mut operations = HashMap::new();
 
         for (method, operation) in path_item.methods() {
-            let method_str = format!("{:?}", method).to_ascii_uppercase();
-
             // Merge path-level and operation-level parameters.
             // Operation-level overrides path-level by name+location.
             let op_params = operation.parameters(spec).unwrap_or_default();
@@ -207,8 +229,8 @@ pub fn compile_spec(spec: &oas3::Spec) -> Result<CompiledSpec, SpecError> {
             // Compile request body
             let request_body = compile_request_body(operation, spec)?;
 
-            route_operations.insert(
-                method_str,
+            operations.insert(
+                method.as_str().to_ascii_uppercase(),
                 CompiledOperation {
                     path_params,
                     query_params,
@@ -219,13 +241,18 @@ pub fn compile_spec(spec: &oas3::Spec) -> Result<CompiledSpec, SpecError> {
             );
         }
 
-        operations.insert(path_template.clone(), route_operations);
+        router
+            .insert(
+                normalize_path(path_template),
+                CompiledRoute {
+                    template: path_template.clone(),
+                    operations,
+                },
+            )
+            .map_err(|e| SpecError::PathTemplateError(path_template.clone(), e.to_string()))?;
     }
 
-    Ok(CompiledSpec {
-        path_tree,
-        operations,
-    })
+    Ok(CompiledSpec { router })
 }
 
 fn resolve_param(
@@ -248,15 +275,7 @@ fn compile_param(
     spec: &oas3::Spec,
 ) -> Result<CompiledParam, SpecError> {
     let schema_validator = match &param.schema {
-        Some(schema_or_ref) => {
-            let schema_obj = resolve_schema(schema_or_ref, spec)?;
-            let schema_json = serde_json::to_value(&schema_obj)
-                .map_err(|e| SpecError::SchemaCompileError(e.to_string()))?;
-            Some(
-                jsonschema::validator_for(&schema_json)
-                    .map_err(|e| SpecError::SchemaCompileError(e.to_string()))?,
-            )
-        }
+        Some(schema) => Some(compile_schema(schema, spec)?),
         None => None,
     };
 
@@ -267,28 +286,18 @@ fn compile_param(
     })
 }
 
-fn resolve_schema(
-    schema_or_ref: &oas3::spec::ObjectOrReference<oas3::spec::ObjectSchema>,
+/// Resolve a top-level `$ref` (if any) and compile the schema into a validator.
+fn compile_schema(
+    schema: &oas3::spec::Schema,
     spec: &oas3::Spec,
-) -> Result<oas3::spec::ObjectSchema, SpecError> {
-    match schema_or_ref {
-        oas3::spec::ObjectOrReference::Object(s) => Ok(s.clone()),
-        oas3::spec::ObjectOrReference::Ref { ref_path, .. } => {
-            let name = ref_path
-                .rsplit('/')
-                .next()
-                .ok_or_else(|| SpecError::RefResolutionError(ref_path.clone()))?;
-            let components = spec
-                .components
-                .as_ref()
-                .ok_or_else(|| SpecError::RefResolutionError(ref_path.clone()))?;
-            let resolved = components
-                .schemas
-                .get(name)
-                .ok_or_else(|| SpecError::RefResolutionError(ref_path.clone()))?;
-            resolve_schema(resolved, spec)
-        }
-    }
+) -> Result<Validator, SpecError> {
+    let resolved = schema
+        .resolve(spec)
+        .map_err(|e| SpecError::RefResolutionError(e.to_string()))?;
+    let schema_json = serde_json::to_value(&resolved)
+        .map_err(|e| SpecError::SchemaCompileError(e.to_string()))?;
+    jsonschema::validator_for(&schema_json)
+        .map_err(|e| SpecError::SchemaCompileError(e.to_string()))
 }
 
 fn compile_request_body(
@@ -306,15 +315,7 @@ fn compile_request_body(
 
     for (media_type_str, media_type) in &body.content {
         let schema_validator = match &media_type.schema {
-            Some(schema_or_ref) => {
-                let schema_obj = resolve_schema(schema_or_ref, spec)?;
-                let schema_json = serde_json::to_value(&schema_obj)
-                    .map_err(|e| SpecError::SchemaCompileError(e.to_string()))?;
-                Some(
-                    jsonschema::validator_for(&schema_json)
-                        .map_err(|e| SpecError::SchemaCompileError(e.to_string()))?,
-                )
-            }
+            Some(schema) => Some(compile_schema(schema, spec)?),
             None => None,
         };
 
@@ -325,4 +326,159 @@ fn compile_request_body(
     }
 
     Ok(Some(CompiledRequestBody { required, content }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build a spec whose paths all expose a GET with no parameters.
+    fn build_spec(templates: &[&str]) -> CompiledSpec {
+        let paths: Vec<String> = templates
+            .iter()
+            .map(|t| format!(r#""{t}": {{"get": {{"responses": {{"200": {{"description": "ok"}}}}}}}}"#))
+            .collect();
+        let json = format!(
+            r#"{{"openapi": "3.1.0", "info": {{"title": "t", "version": "1"}}, "paths": {{{}}}}}"#,
+            paths.join(",")
+        );
+        CompiledSpec::from_json(&json).unwrap()
+    }
+
+    #[test]
+    fn test_simple_static_path() {
+        let spec = build_spec(&["/users"]);
+        let m = spec.match_route("/users").unwrap();
+        assert_eq!(m.template, "/users");
+        assert!(m.params.is_empty());
+    }
+
+    #[test]
+    fn test_no_match() {
+        let spec = build_spec(&["/users"]);
+        assert!(spec.match_route("/posts").is_none());
+    }
+
+    #[test]
+    fn test_path_with_param() {
+        let spec = build_spec(&["/users/{id}"]);
+        let m = spec.match_route("/users/123").unwrap();
+        assert_eq!(m.template, "/users/{id}");
+        assert_eq!(m.params, vec![("id", "123")]);
+    }
+
+    #[test]
+    fn test_multiple_params() {
+        let spec = build_spec(&["/users/{userId}/posts/{postId}"]);
+        let m = spec.match_route("/users/42/posts/99").unwrap();
+        assert_eq!(m.template, "/users/{userId}/posts/{postId}");
+        assert_eq!(m.params, vec![("userId", "42"), ("postId", "99")]);
+    }
+
+    #[test]
+    fn test_no_match_extra_segments() {
+        let spec = build_spec(&["/users/{id}"]);
+        assert!(spec.match_route("/users/123/extra").is_none());
+    }
+
+    #[test]
+    fn test_no_match_too_few_segments() {
+        let spec = build_spec(&["/users/{id}"]);
+        assert!(spec.match_route("/users").is_none());
+    }
+
+    #[test]
+    fn test_static_over_param_priority() {
+        let spec = build_spec(&["/users/me", "/users/{id}"]);
+        let m = spec.match_route("/users/me").unwrap();
+        assert_eq!(m.template, "/users/me");
+        assert!(m.params.is_empty());
+
+        let m = spec.match_route("/users/123").unwrap();
+        assert_eq!(m.template, "/users/{id}");
+        assert_eq!(m.params, vec![("id", "123")]);
+    }
+
+    #[test]
+    fn test_different_param_names_at_same_position() {
+        // Each template keeps its own parameter name.
+        let spec = build_spec(&["/users/{id}", "/users/{userId}/posts"]);
+        let m = spec.match_route("/users/5").unwrap();
+        assert_eq!(m.params, vec![("id", "5")]);
+
+        let m = spec.match_route("/users/5/posts").unwrap();
+        assert_eq!(m.template, "/users/{userId}/posts");
+        assert_eq!(m.params, vec![("userId", "5")]);
+    }
+
+    #[test]
+    fn test_param_with_suffix() {
+        let spec = build_spec(&["/files/{name}.json"]);
+        let m = spec.match_route("/files/report.json").unwrap();
+        assert_eq!(m.params, vec![("name", "report")]);
+        assert!(spec.match_route("/files/report.xml").is_none());
+    }
+
+    #[test]
+    fn test_duplicate_template_with_different_param_name_is_rejected() {
+        // OpenAPI forbids templates that differ only by parameter name.
+        let json = r#"{"openapi": "3.1.0", "info": {"title": "t", "version": "1"}, "paths": {
+            "/pets/{id}": {"get": {"responses": {"200": {"description": "ok"}}}},
+            "/pets/{petId}": {"get": {"responses": {"200": {"description": "ok"}}}}
+        }}"#;
+        assert!(matches!(
+            CompiledSpec::from_json(json),
+            Err(SpecError::PathTemplateError(..))
+        ));
+    }
+
+    #[test]
+    fn test_multiple_routes() {
+        let spec = build_spec(&["/users", "/users/{id}", "/posts", "/posts/{id}/comments"]);
+
+        assert!(spec.match_route("/users").is_some());
+        assert!(spec.match_route("/users/5").is_some());
+        assert!(spec.match_route("/posts").is_some());
+        assert!(spec.match_route("/posts/1/comments").is_some());
+        assert!(spec.match_route("/other").is_none());
+    }
+
+    #[test]
+    fn test_trailing_slash() {
+        let spec = build_spec(&["/users", "/posts/"]);
+        assert!(spec.match_route("/users/").is_some());
+        assert!(spec.match_route("/posts").is_some());
+        assert!(spec.match_route("/posts/").is_some());
+    }
+
+    #[test]
+    fn test_param_rejects_empty_segment() {
+        let spec = build_spec(&["/users/{id}/posts"]);
+        assert!(spec.match_route("/users//posts").is_none());
+    }
+
+    #[test]
+    fn test_root_path() {
+        let spec = build_spec(&["/"]);
+        assert!(spec.match_route("/").is_some());
+        assert!(spec.match_route("").is_some());
+    }
+
+    #[test]
+    fn test_method_check() {
+        let spec = build_spec(&["/users"]);
+        let m = spec.match_route("/users").unwrap();
+        assert!(m.check_method("get").is_ok());
+        let err = m.check_method("DELETE").err().expect("DELETE must be rejected");
+        assert_eq!(err.kind, ValidationErrorKind::MethodNotAllowed);
+        assert!(err.message.contains("Allowed: GET"));
+    }
+
+    #[test]
+    fn test_from_json_parse_error() {
+        assert!(matches!(
+            CompiledSpec::from_json("not json"),
+            Err(SpecError::ParseError(_))
+        ));
+    }
 }

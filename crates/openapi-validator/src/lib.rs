@@ -3,7 +3,6 @@ pub mod compiled_spec;
 pub mod content_type;
 pub mod error;
 pub mod param_validator;
-pub mod path_matcher;
 
 pub use compiled_spec::{CompiledSpec, ValidationConfig, ValidationParts};
 use error::{ValidationError, ValidationErrorKind, ValidationResult};
@@ -53,10 +52,8 @@ pub fn validate_request(
             return ValidationResult::Valid;
         }
     };
-    let captured_params = matched.params;
-
     // 2. Method check
-    let operation = match spec.check_method(matched.template, &request.method) {
+    let operation = match matched.check_method(&request.method) {
         Ok(op) => op,
         Err(err) => {
             if parts.method {
@@ -69,7 +66,7 @@ pub fn validate_request(
     // 3. Path parameter validation
     if parts.path_params {
         param_validator::validate_path_params(
-            &captured_params,
+            &matched.params,
             &operation.path_params,
             &mut errors,
         );
@@ -228,8 +225,7 @@ mod tests {
     }
 
     fn compile_test_spec() -> CompiledSpec {
-        let spec = oas3::from_json(sample_spec_json()).unwrap();
-        compiled_spec::compile_spec(&spec).unwrap()
+        CompiledSpec::from_json(sample_spec_json()).unwrap()
     }
 
     #[test]

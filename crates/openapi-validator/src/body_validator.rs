@@ -37,7 +37,7 @@ pub fn validate_body(
                     errors.push(ValidationError {
                         kind: ValidationErrorKind::SchemaValidation,
                         message: err.to_string(),
-                        path: format!("body{}", err.instance_path),
+                        path: format!("body{}", err.instance_path()),
                     });
                 }
             }

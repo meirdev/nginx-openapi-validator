@@ -19,7 +19,7 @@ use ngx::{
 };
 
 use openapi_validator::compiled_spec::{
-    self, CompiledSpec, EnforcementMode, ValidationConfig, ValidationParts,
+    CompiledSpec, EnforcementMode, ValidationConfig, ValidationParts,
 };
 use openapi_validator::error::ValidationResult;
 
@@ -432,24 +432,28 @@ extern "C" fn cmd_set_spec(
         // Parse and compile the spec at config time
         let spec_content = match std::fs::read_to_string(&path) {
             Ok(s) => s,
-            Err(_e) => {
-                ngx_conf_log_error!(NGX_LOG_EMERG, cf, "openapi_spec: failed to read file");
+            Err(e) => {
+                ngx_conf_log_error!(
+                    NGX_LOG_EMERG,
+                    cf,
+                    "openapi_spec: failed to read {}: {}",
+                    path,
+                    e
+                );
                 return ngx::core::NGX_CONF_ERROR;
             }
         };
 
-        let oas_spec = match oas3::from_json(&spec_content) {
-            Ok(s) => s,
-            Err(_e) => {
-                ngx_conf_log_error!(NGX_LOG_EMERG, cf, "openapi_spec: failed to parse spec");
-                return ngx::core::NGX_CONF_ERROR;
-            }
-        };
-
-        let compiled = match compiled_spec::compile_spec(&oas_spec) {
+        let compiled = match CompiledSpec::from_json(&spec_content) {
             Ok(c) => c,
-            Err(_e) => {
-                ngx_conf_log_error!(NGX_LOG_EMERG, cf, "openapi_spec: failed to compile spec");
+            Err(e) => {
+                ngx_conf_log_error!(
+                    NGX_LOG_EMERG,
+                    cf,
+                    "openapi_spec: failed to load {}: {}",
+                    path,
+                    e
+                );
                 return ngx::core::NGX_CONF_ERROR;
             }
         };
