@@ -1,3 +1,10 @@
+//! nginx module that validates requests against an OpenAPI document.
+//!
+//! Note on request bodies: when body validation is enabled the whole body is
+//! read and buffered in the access phase, before the content handler runs.
+//! In a validated location `proxy_request_buffering off` therefore has no
+//! effect; the body is always buffered up to `client_max_body_size`.
+
 use core::ffi::{c_char, c_void};
 use core::ptr;
 use std::cell::{Cell, OnceCell};
@@ -84,7 +91,7 @@ impl ValidationVars {
     fn invalid(errors: &[ValidationError]) -> Self {
         let first_error = errors
             .first()
-            .map(|e| format!("{}: {}", e.path, e.message))
+            .map(|e| truncate(&format!("{}: {}", e.path, e.message), MAX_LOG_VALUE_LEN))
             .unwrap_or_default();
         let error_count_str = errors.len().to_string();
         // Clone errors for lazy JSON serialization
@@ -362,18 +369,30 @@ fn oav_handler(request: &mut http::Request) -> Status {
         return Status(ctx.decision.get());
     }
 
+    // An error page is served through an internal redirect that clears the
+    // module context. Validating the error page itself could reject it again
+    // and loop until nginx gives up, so error responses pass through.
+    let (has_body, serving_error_page) = {
+        let raw = request.as_ref();
+        (
+            raw.headers_in.content_length_n > 0 || raw.headers_in.chunked() != 0,
+            raw.err_status != 0,
+        )
+    };
+    if serving_error_page {
+        return Status::NGX_DECLINED;
+    }
+
     let ctx_ptr = request.pool().allocate(ValidationContext::pending());
     if ctx_ptr.is_null() {
         return Status::NGX_ERROR;
     }
     request.set_module_ctx(ctx_ptr as *mut c_void, Module::module());
 
-    let r = request.as_mut() as *mut ngx_http_request_t;
-    let has_body = unsafe {
-        (*r).headers_in.content_length_n > 0 || (*r).headers_in.chunked() != 0
-    };
-
     if has_body && co.parts.as_ref().is_none_or(|p| p.body) {
+        // From here on only the raw pointer touches the request; `request`
+        // is not used again in this branch.
+        let r = request.as_mut() as *mut ngx_http_request_t;
         let rc = unsafe { ngx_http_read_client_request_body(r, Some(oav_body_handler)) };
         if rc >= NGX_HTTP_SPECIAL_RESPONSE as ngx_int_t {
             return Status(rc);
@@ -393,32 +412,34 @@ fn oav_handler(request: &mut http::Request) -> Status {
 
 /// Called by nginx once the whole request body is available.
 unsafe extern "C" fn oav_body_handler(r: *mut ngx_http_request_t) {
+    // Everything that goes through the raw pointer happens before a
+    // reference to the request exists, and the final writes go through that
+    // reference, so no two live paths alias the request.
+    let body = unsafe { read_request_body(r) };
     let request = unsafe { http::Request::from_ngx_http_request(r) };
 
-    let decision = match Module::location_conf(request) {
-        Some(co) => match unsafe { read_request_body(r) } {
-            Ok(body) => validate(request, co, body),
-            Err(()) => {
-                ngx_log_error!(
-                    NGX_LOG_ERR,
-                    request.log(),
-                    "openapi_validate: failed to read request body"
-                );
-                HTTPStatus::INTERNAL_SERVER_ERROR.into()
-            }
-        },
-        None => Status::NGX_DECLINED,
+    let decision = match (Module::location_conf(request), body) {
+        (Some(co), Ok(body)) => validate(request, co, body),
+        (Some(_), Err(())) => {
+            ngx_log_error!(
+                NGX_LOG_ERR,
+                request.log(),
+                "openapi_validate: failed to read request body"
+            );
+            HTTPStatus::INTERNAL_SERVER_ERROR.into()
+        }
+        (None, _) => Status::NGX_DECLINED,
     };
 
     if let Some(ctx) = ctx(request) {
         ctx.decision.set(decision.0);
     }
 
-    unsafe {
-        (*r).set_preserve_body(1);
-        (*r).write_event_handler = Some(ngx_http_core_run_phases);
-        ngx_http_core_run_phases(r);
-    }
+    let raw = request.as_mut();
+    raw.set_preserve_body(1);
+    raw.write_event_handler = Some(ngx_http_core_run_phases);
+    let r = raw as *mut ngx_http_request_t;
+    unsafe { ngx_http_core_run_phases(r) };
 }
 
 /// Collect the buffered request body into one contiguous byte vector.
@@ -437,7 +458,7 @@ unsafe fn read_request_body(r: *mut ngx_http_request_t) -> Result<Option<Vec<u8>
         if !buf.is_null() {
             if (*buf).in_file() != 0 {
                 let file = (*buf).file;
-                if file.is_null() {
+                if file.is_null() || (*buf).file_last < (*buf).file_pos {
                     return Err(());
                 }
                 let len = ((*buf).file_last - (*buf).file_pos) as usize;
@@ -448,6 +469,9 @@ unsafe fn read_request_body(r: *mut ngx_http_request_t) -> Result<Option<Vec<u8>
                 f.read_exact_at(&mut out[start..], (*buf).file_pos as u64)
                     .map_err(|_| ())?;
             } else if !(*buf).pos.is_null() {
+                if (*buf).last < (*buf).pos {
+                    return Err(());
+                }
                 let len = (*buf).last.offset_from((*buf).pos) as usize;
                 out.extend_from_slice(core::slice::from_raw_parts((*buf).pos, len));
             }
@@ -523,11 +547,14 @@ fn build_request_data(request: &http::Request, body: Option<Vec<u8>>) -> Request
         }
     };
 
+    // Header values are not required to be UTF-8; a lossy conversion keeps
+    // the header visible to validation instead of silently dropping it.
     let mut headers: Vec<(String, String)> = Vec::with_capacity(16);
     for (key, value) in request.headers_in_iterator() {
-        if let (Ok(k), Ok(v)) = (key.to_str(), value.to_str()) {
-            headers.push((k.to_string(), v.to_string()));
-        }
+        headers.push((
+            key.to_string_lossy().into_owned(),
+            value.to_string_lossy().into_owned(),
+        ));
     }
 
     RequestData {
@@ -539,12 +566,29 @@ fn build_request_data(request: &http::Request, body: Option<Vec<u8>>) -> Request
     }
 }
 
+/// Longest client-derived text placed in a log line or variable. Schema
+/// errors quote instance values, which can be as large as the body.
+const MAX_LOG_VALUE_LEN: usize = 512;
+
 /// Strip control characters so client-controlled values cannot inject fake
-/// lines into the error log.
+/// lines into the error log, and bound the length.
 fn sanitize_for_log(s: &str) -> String {
-    s.chars()
+    truncate(s, MAX_LOG_VALUE_LEN)
+        .chars()
         .map(|c| if c.is_control() { ' ' } else { c })
         .collect()
+}
+
+/// Cut `s` to at most `max` bytes on a character boundary, marking the cut.
+fn truncate(s: &str, max: usize) -> String {
+    if s.len() <= max {
+        return s.to_string();
+    }
+    let mut end = max;
+    while !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}...", &s[..end])
 }
 
 // ---------------------------------------------------------------------------

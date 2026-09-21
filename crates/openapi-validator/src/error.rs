@@ -45,11 +45,22 @@ impl ValidationResult {
     }
 
     /// Returns the most appropriate HTTP status code for the validation errors.
-    /// Uses the first error's status code.
+    ///
+    /// The most specific status wins regardless of error order: 404, then
+    /// 405, then 415, then 400. A request with a bad query parameter and an
+    /// unsupported Content-Type is therefore reported as 415.
     pub fn http_status(&self) -> Option<u16> {
         match self {
             Self::Valid => None,
-            Self::Invalid(errors) => errors.first().map(|e| e.kind.http_status()),
+            Self::Invalid(errors) => errors
+                .iter()
+                .map(|e| e.kind.http_status())
+                .max_by_key(|status| match status {
+                    404 => 3,
+                    405 => 2,
+                    415 => 1,
+                    _ => 0,
+                }),
         }
     }
 }
@@ -64,4 +75,25 @@ pub enum SpecError {
     RefResolutionError(String),
     #[error("failed to compile JSON schema: {0}")]
     SchemaCompileError(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn err(kind: ValidationErrorKind) -> ValidationError {
+        ValidationError { kind, message: String::new(), path: String::new() }
+    }
+
+    #[test]
+    fn most_specific_status_wins() {
+        let r = ValidationResult::Invalid(vec![
+            err(ValidationErrorKind::InvalidParamValue),
+            err(ValidationErrorKind::UnsupportedContentType),
+        ]);
+        assert_eq!(r.http_status(), Some(415));
+        let r = ValidationResult::Invalid(vec![err(ValidationErrorKind::SchemaValidation)]);
+        assert_eq!(r.http_status(), Some(400));
+        assert_eq!(ValidationResult::Valid.http_status(), None);
+    }
 }

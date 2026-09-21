@@ -212,10 +212,15 @@ pub struct MatchedRoute<'a> {
 
 impl<'a> MatchedRoute<'a> {
     /// Look up the operation for an HTTP method on this route.
+    ///
+    /// A HEAD request falls back to the GET operation when the spec does not
+    /// declare HEAD, since servers answer HEAD from the GET handler.
     pub fn check_method(&self, method: &str) -> Result<&'a CompiledOperation, ValidationError> {
+        let method_upper = method.to_ascii_uppercase();
         self.route
             .operations
-            .get(&method.to_ascii_uppercase())
+            .get(&method_upper)
+            .or_else(|| (method_upper == "HEAD").then(|| self.route.operations.get("GET")).flatten())
             .ok_or_else(|| {
                 let mut allowed: Vec<&str> =
                     self.route.operations.keys().map(String::as_str).collect();
@@ -382,11 +387,13 @@ fn compile_document(mut doc: Value) -> Result<CompiledSpec, SpecError> {
         registry,
     };
 
-    let mut router = Router::new();
+    // Routes keyed by normalized template, so `/users` and `/users/` merge
+    // into one route instead of colliding in the router.
+    let mut routes: Vec<(String, CompiledRoute)> = Vec::new();
     let (root_pointer, root) = document.node();
     let Some((paths_pointer, paths)) = document.child(&root_pointer, root, "paths") else {
         return Ok(CompiledSpec {
-            router,
+            router: Router::new(),
             document: document.root,
         });
     };
@@ -453,15 +460,38 @@ fn compile_document(mut doc: Value) -> Result<CompiledSpec, SpecError> {
             );
         }
 
-        router
-            .insert(
-                normalize_path(path_template),
+        let normalized = normalize_path(path_template).to_string();
+        match routes.iter_mut().find(|(key, _)| *key == normalized) {
+            Some((_, existing)) => {
+                for (method, op) in operations {
+                    if existing.operations.contains_key(&method) {
+                        return Err(SpecError::PathTemplateError(
+                            path_template.clone(),
+                            format!(
+                                "{method} is already declared on '{}', which differs only by a trailing slash",
+                                existing.template
+                            ),
+                        ));
+                    }
+                    existing.operations.insert(method, op);
+                }
+            }
+            None => routes.push((
+                normalized,
                 CompiledRoute {
                     template: path_template.clone(),
                     operations,
                 },
-            )
-            .map_err(|e| SpecError::PathTemplateError(path_template.clone(), e.to_string()))?;
+            )),
+        }
+    }
+
+    let mut router = Router::new();
+    for (normalized, route) in routes {
+        let template = route.template.clone();
+        router
+            .insert(normalized, route)
+            .map_err(|e| SpecError::PathTemplateError(template, e.to_string()))?;
     }
 
     Ok(CompiledSpec {
@@ -733,6 +763,33 @@ mod tests {
         assert!(spec.match_route("/users/").is_some());
         assert!(spec.match_route("/posts").is_some());
         assert!(spec.match_route("/posts/").is_some());
+    }
+
+    #[test]
+    fn test_slash_variants_merge_or_conflict() {
+        let json = r#"{"openapi": "3.1.0", "info": {"title": "t", "version": "1"}, "paths": {
+            "/users": {"get": {"responses": {"200": {"description": "ok"}}}},
+            "/users/": {"post": {"responses": {"200": {"description": "ok"}}}}
+        }}"#;
+        let spec = CompiledSpec::from_json(json).unwrap();
+        let m = spec.match_route("/users").unwrap();
+        assert!(m.check_method("GET").is_ok());
+        assert!(m.check_method("POST").is_ok());
+
+        let json = r#"{"openapi": "3.1.0", "info": {"title": "t", "version": "1"}, "paths": {
+            "/users": {"get": {"responses": {"200": {"description": "ok"}}}},
+            "/users/": {"get": {"responses": {"200": {"description": "ok"}}}}
+        }}"#;
+        assert!(matches!(CompiledSpec::from_json(json), Err(SpecError::PathTemplateError(..))));
+    }
+
+    #[test]
+    fn test_head_falls_back_to_get() {
+        let spec = build_spec(&["/users"]);
+        let m = spec.match_route("/users").unwrap();
+        assert!(m.check_method("HEAD").is_ok());
+        assert!(m.check_method("head").is_ok());
+        assert!(m.check_method("OPTIONS").is_err());
     }
 
     #[test]

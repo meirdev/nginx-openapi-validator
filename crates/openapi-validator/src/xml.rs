@@ -14,6 +14,9 @@ use crate::coerce::{self, deref};
 use crate::compiled_spec::CompiledMediaType;
 use crate::error::{ValidationError, ValidationErrorKind};
 
+/// Deepest element nesting converted. Bounds recursion in [`convert`].
+const MAX_DEPTH: usize = 64;
+
 pub fn decode(
     raw: &[u8],
     media: Option<&CompiledMediaType>,
@@ -61,7 +64,7 @@ pub fn decode(
     }
 
     let mut errors = Vec::new();
-    let value = convert(element, schema, root, "body", &mut errors);
+    let value = convert(element, schema, root, "body", 0, &mut errors);
     if errors.is_empty() {
         Ok(value)
     } else {
@@ -80,15 +83,22 @@ fn convert(
     schema: Option<&Value>,
     root: &Value,
     path: &str,
+    depth: usize,
     errors: &mut Vec<ValidationError>,
 ) -> Value {
+    if depth > MAX_DEPTH {
+        errors.push(invalid_body(format!(
+            "XML nesting deeper than {MAX_DEPTH} levels at {path}"
+        )));
+        return Value::Null;
+    }
     let schema = schema.map(|s| deref(root, s));
     let has_structure = node.attributes().len() > 0 || node.children().any(|c| c.is_element());
 
     if coerce::is_object_schema(root, schema)
-        || (schema.map_or(true, |s| coerce::schema_types(s).is_empty()) && has_structure)
+        || (schema.is_none_or(|s| coerce::schema_types(s).is_empty()) && has_structure)
     {
-        convert_object(node, schema, root, path, errors)
+        convert_object(node, schema, root, path, depth, errors)
     } else {
         coerce::coerce(&text_of(node), root, schema)
     }
@@ -138,6 +148,7 @@ fn convert_object(
     schema: Option<&Value>,
     root: &Value,
     path: &str,
+    depth: usize,
     errors: &mut Vec<ValidationError>,
 ) -> Value {
     let mappings = mappings(schema, root);
@@ -183,19 +194,20 @@ fn convert_object(
                 let items_schema = coerce::items_schema(root, Some(m.schema));
                 let child_path = format!("{path}/{}", m.property);
                 if wrapped {
-                    let value =
-                        convert_wrapped_array(child, m.property, items_schema, root, &child_path, errors);
+                    let value = convert_wrapped_array(
+                        child, m.property, items_schema, root, &child_path, depth + 1, errors,
+                    );
                     object.insert(m.property.to_string(), value);
                 } else {
                     let index = object.get(m.property).and_then(Value::as_array).map_or(0, Vec::len);
                     let item_path = format!("{child_path}/{index}");
-                    let value = convert(child, items_schema, root, &item_path, errors);
+                    let value = convert(child, items_schema, root, &item_path, depth + 1, errors);
                     push(&mut object, m.property, value, true);
                 }
             }
             Some(m) => {
                 let child_path = format!("{path}/{}", m.property);
-                let value = convert(child, Some(m.schema), root, &child_path, errors);
+                let value = convert(child, Some(m.schema), root, &child_path, depth + 1, errors);
                 push(&mut object, m.property, value, false);
             }
             None => {
@@ -210,7 +222,7 @@ fn convert_object(
                     });
                 }
                 let child_path = format!("{path}/{local_name}");
-                let value = convert(child, None, root, &child_path, errors);
+                let value = convert(child, None, root, &child_path, depth + 1, errors);
                 push(&mut object, local_name, value, false);
             }
         }
@@ -227,6 +239,7 @@ fn convert_wrapped_array(
     items_schema: Option<&Value>,
     root: &Value,
     path: &str,
+    depth: usize,
     errors: &mut Vec<ValidationError>,
 ) -> Value {
     let items_xml = items_schema.and_then(|s| s.get("xml"));
@@ -243,14 +256,14 @@ fn convert_wrapped_array(
     if !all_match {
         // Mismatched item names: expose the wrapper's real shape so the
         // array type check fails with a clear error.
-        return convert_object(wrapper, None, root, path, errors);
+        return convert_object(wrapper, None, root, path, depth, errors);
     }
 
     Value::Array(
         children
             .into_iter()
             .enumerate()
-            .map(|(i, c)| convert(c, items_schema, root, &format!("{path}/{i}"), errors))
+            .map(|(i, c)| convert(c, items_schema, root, &format!("{path}/{i}"), depth + 1, errors))
             .collect(),
     )
 }
@@ -324,9 +337,17 @@ mod tests {
     fn to_json(xml: &str, schema: Value) -> Value {
         let doc = Document::parse(xml).unwrap();
         let mut errors = Vec::new();
-        let v = convert(doc.root_element(), Some(&schema), &Value::Null, "body", &mut errors);
+        let v = convert(doc.root_element(), Some(&schema), &Value::Null, "body", 0, &mut errors);
         assert!(errors.is_empty(), "{errors:?}");
         v
+    }
+
+    #[test]
+    fn excessive_nesting_is_rejected() {
+        let depth = MAX_DEPTH + 2;
+        let xml = format!("{}x{}", "<a>".repeat(depth), "</a>".repeat(depth));
+        let errors = decode(xml.as_bytes(), None, &Value::Null).unwrap_err();
+        assert_eq!(errors[0].kind, ValidationErrorKind::InvalidBody);
     }
 
     #[test]

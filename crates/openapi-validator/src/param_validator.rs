@@ -216,7 +216,7 @@ fn decode_query(
             found = true;
             let (_, path) = form::split_bracket_path(key);
             let leaf_schema = form::navigate(root, schema, &path);
-            form::insert_path(&mut value, &path, coerce::coerce(raw, root, leaf_schema));
+            form::insert_path(&mut value, &path, coerce::coerce(raw, root, leaf_schema))?;
         }
         return Ok(found.then_some(vec![value]));
     }
@@ -530,6 +530,10 @@ mod tests {
         assert!(query_errors("p[a]=1&p[n][c]=true", &p).is_empty());
         assert!(!query_errors("p[a]=x", &p).is_empty());
         assert_eq!(query_errors("other=1", &p)[0].kind, ValidationErrorKind::MissingRequiredParam);
+        // Sparse indexes and runaway nesting are rejected, not allocated.
+        assert_eq!(query_errors("p[9999]=1", &p)[0].kind, ValidationErrorKind::InvalidParamValue);
+        let deep = format!("p{}=1", "[x]".repeat(form::MAX_NESTING + 1));
+        assert_eq!(query_errors(&deep, &p)[0].kind, ValidationErrorKind::InvalidParamValue);
         assert!(query_key_belongs_to("p[a]", &p, &Value::Null));
         assert!(!query_key_belongs_to("q", &p, &Value::Null));
     }

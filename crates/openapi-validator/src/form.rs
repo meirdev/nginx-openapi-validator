@@ -7,6 +7,10 @@ use crate::coerce::{self, deref};
 use crate::compiled_spec::CompiledMediaType;
 use crate::error::{ValidationError, ValidationErrorKind};
 
+/// Deepest bracket nesting accepted in a field name such as `a[b][c]`.
+/// Bounds recursion in [`insert_path`] and [`navigate`].
+pub(crate) const MAX_NESTING: usize = 32;
+
 /// RFC 3986 reserved characters, which a field may only contain unencoded
 /// when its encoding sets `allowReserved: true`.
 const RESERVED: &[char] = &[
@@ -36,6 +40,12 @@ pub fn decode(
         let key = percent_decode(raw_key)
             .map_err(|e| vec![invalid_body("body", format!("Malformed URL encoding in field name '{raw_key}': {e}"))])?;
         let (top, path) = split_bracket_path(&key);
+        if path.len() > MAX_NESTING {
+            return Err(vec![invalid_body(
+                "body",
+                format!("Field '{top}' is nested deeper than {MAX_NESTING} levels"),
+            )]);
+        }
         match fields.iter_mut().find(|(name, _)| *name == top) {
             Some((_, values)) => values.push((path, raw_value.to_string())),
             None => fields.push((top, vec![(path, raw_value.to_string())])),
@@ -120,7 +130,7 @@ fn decode_field(
         for (path, raw) in occurrences {
             let leaf_schema = navigate(root, schema, path);
             let item = decode_scalar(raw, leaf_schema, allow_reserved, root)?;
-            insert_path(&mut value, path, item);
+            insert_path(&mut value, path, item).map_err(FieldError::Encoding)?;
         }
         return Ok(value);
     }
@@ -240,10 +250,17 @@ pub(crate) fn split_bracket_path(key: &str) -> (String, Vec<String>) {
 
 /// Insert `leaf` at `path` inside `target`, creating arrays for numeric or
 /// empty segments and objects otherwise.
-pub(crate) fn insert_path(target: &mut Value, path: &[String], leaf: Value) {
+///
+/// Array indexes must be dense: an index may address an existing item or
+/// append one, but never skip ahead. Otherwise a key like `a[99999]` could
+/// make the decoder allocate arbitrarily large arrays.
+pub(crate) fn insert_path(target: &mut Value, path: &[String], leaf: Value) -> Result<(), String> {
+    if path.len() > MAX_NESTING {
+        return Err(format!("nesting deeper than {MAX_NESTING} levels"));
+    }
     let Some((segment, rest)) = path.split_first() else {
         *target = leaf;
-        return;
+        return Ok(());
     };
 
     if segment.is_empty() || segment.chars().all(|c| c.is_ascii_digit()) {
@@ -254,12 +271,20 @@ pub(crate) fn insert_path(target: &mut Value, path: &[String], leaf: Value) {
         let index = if segment.is_empty() {
             items.len()
         } else {
-            segment.parse::<usize>().unwrap_or(0).min(10_000)
+            segment
+                .parse::<usize>()
+                .map_err(|_| format!("invalid array index '{segment}'"))?
         };
-        while items.len() <= index {
+        if index > items.len() {
+            return Err(format!(
+                "array index {index} skips ahead of the {} items received so far",
+                items.len()
+            ));
+        }
+        if index == items.len() {
             items.push(Value::Null);
         }
-        insert_path(&mut items[index], rest, leaf);
+        insert_path(&mut items[index], rest, leaf)
     } else {
         if !target.is_object() {
             *target = Value::Object(Map::new());
@@ -269,7 +294,7 @@ pub(crate) fn insert_path(target: &mut Value, path: &[String], leaf: Value) {
             .unwrap()
             .entry(segment.clone())
             .or_insert(Value::Null);
-        insert_path(entry, rest, leaf);
+        insert_path(entry, rest, leaf)
     }
 }
 
@@ -329,10 +354,24 @@ mod tests {
     #[test]
     fn nested_insert() {
         let mut v = Value::Null;
-        insert_path(&mut v, &["0".into(), "name".into()], json!(true));
-        insert_path(&mut v, &["0".into(), "age".into()], json!(4));
-        insert_path(&mut v, &["1".into(), "name".into()], json!(false));
-        assert_eq!(v, json!([{"name": true, "age": 4}, {"name": false}]));
+        insert_path(&mut v, &["0".into(), "name".into()], json!(true)).unwrap();
+        insert_path(&mut v, &["0".into(), "age".into()], json!(4)).unwrap();
+        insert_path(&mut v, &["1".into(), "name".into()], json!(false)).unwrap();
+        insert_path(&mut v, &["".into()], json!("appended")).unwrap();
+        assert_eq!(v, json!([{"name": true, "age": 4}, {"name": false}, "appended"]));
+    }
+
+    #[test]
+    fn sparse_index_and_deep_nesting_are_rejected() {
+        let mut v = Value::Null;
+        assert!(insert_path(&mut v, &["99999".into()], json!(1)).is_err());
+        let deep: Vec<String> = (0..=MAX_NESTING).map(|i| i.to_string()).collect();
+        assert!(insert_path(&mut v, &deep, json!(1)).is_err());
+
+        let sparse = decode(b"a[5]=1", None, &Value::Null).unwrap_err();
+        assert_eq!(sparse[0].kind, ValidationErrorKind::InvalidBody);
+        let key = format!("a{}=1", "[b]".repeat(MAX_NESTING + 1));
+        assert!(decode(key.as_bytes(), None, &Value::Null).is_err());
     }
 
     #[test]

@@ -100,6 +100,7 @@ check "GET /api/pets is allowed"             200 "$BASE/api/pets?status=availabl
 check "DELETE /api/pets → 405"              405 -X DELETE "$BASE/api/pets"
 check "PATCH /api/pets → 405"               405 -X PATCH "$BASE/api/pets"
 check "DELETE /api/pets/42 is allowed"       200 -X DELETE "$BASE/api/pets/42"
+check "HEAD falls back to GET"               200 -I "$BASE/api/pets?status=available"
 
 # ── Path parameter validation ────────────────────────────────────────
 echo ""
