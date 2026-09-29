@@ -1,3 +1,12 @@
 [workspace]
 resolver = "2"
-members = ["crates/openapi-validator", "crates/ngx-oav-module"]
+members = ["crates/openapi-validator", "crates/ngx-oav-module", "crates/oav-wasm"]
+
+# Size-optimized build of the browser demo (see demo/build.sh).
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

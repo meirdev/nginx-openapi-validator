@@ -177,7 +177,7 @@ cargo build --release --locked -p ngx-oav-module
 
 On Linux, the module is written to `target/release/libngx_oav_module.so`. Copy it into your NGINX module directory and load it with `load_module`.
 
-The module must match the runtime NGINX version and module ABI. The checked-in lockfile resolves `nginx-src` to `1.28.4+1.28.2` (NGINX `1.28.2`); the example runtime uses the `nginx:1.28` image tag. Keep the builder and runtime aligned when changing dependencies or images, and verify loading with `nginx -t`.
+The module must match the runtime NGINX version and module ABI. The checked-in lockfile resolves `nginx-src` to `1.28.4+1.28.2` (NGINX `1.28.2`); the example runtime uses the `nginx:1.28.2` image tag. Keep the builder and runtime aligned when changing dependencies or images, and verify loading with `nginx -t`.
 
 ## Using the Rust library
 
@@ -205,6 +205,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 Unlike the NGINX directive, `ValidationConfig::default()` enables validation. Supply a decoded path and a query string in its original URL-encoded form without the leading `?`. The library returns `ValidationResult`; your application decides how to log or reject failures. Enforcement mode is applied by the NGINX integration, not by `validate_request` itself.
+
+## Browser playground
+
+[demo/](demo/) is a static web page that runs the validation engine in the browser as WebAssembly. Edit a specification, the four directives, and a request to see what the module would do: the status it would return, the errors, the audit-mode `error.log` lines, and the `$oav_*` variable values. It also generates the matching `location` block.
+
+The directive values are parsed by the same code the module uses, and the request path is normalized the way NGINX builds `$uri` (percent-decoding, merged slashes, and `.`/`..` segments). Rewrites, other modules, and nested-location inheritance are not simulated.
+
+Build it with the `wasm32-unknown-unknown` target and a `wasm-bindgen` CLI that matches the version pinned in [crates/oav-wasm/Cargo.toml](crates/oav-wasm/Cargo.toml), then serve `demo/` over HTTP:
+
+```sh
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.129 --locked
+demo/build.sh
+python3 -m http.server -d demo 8080   # http://localhost:8080
+```
+
+The build writes to `demo/pkg/`, which is not checked in. Serve every file in `demo/` as static content to host the playground.
 
 ## Tests
 
@@ -249,6 +266,8 @@ bash example/test.sh
 crates/
   openapi-validator/       Framework-independent validation library and tests
   ngx-oav-module/          NGINX dynamic module, directives, and variables
+  oav-wasm/                WebAssembly bindings for the browser playground
+demo/                      Browser playground (static page and build script)
 example/
   api-spec.json           Example Pet Store specification
   nginx.conf              Validation and proxy configuration

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpenAPI Validator Playground</title>
+  <meta name="description" content="Try the nginx OpenAPI validator module in your browser. The validation engine runs locally as WebAssembly.">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="top">
+    <div>
+      <h1>OpenAPI Validator Playground</h1>
+      <p class="lede">
+        The nginx module's validation engine, compiled to WebAssembly. Edit the spec,
+        the <code>location</code> directives and a request to see what nginx would do.
+        Everything runs in your browser.
+      </p>
+    </div>
+    <span id="engine-status" class="pill">Loading engine…</span>
+  </header>
+
+  <main class="grid">
+    <!-- Spec -->
+    <section class="panel" id="spec-panel">
+      <div class="panel-head">
+        <h2>Spec <span class="hint">openapi_spec</span></h2>
+        <div class="actions">
+          <label class="btn">Open file<input id="spec-file" type="file" accept=".json,application/json" hidden></label>
+          <button class="btn" id="spec-reset" type="button">Load example</button>
+        </div>
+      </div>
+      <textarea id="spec" class="code grow" wrap="off" spellcheck="false" aria-label="OpenAPI document (JSON)"></textarea>
+      <p id="spec-status" class="status" role="status"></p>
+    </section>
+
+    <!-- Directives -->
+    <section class="panel" id="config-panel">
+      <div class="panel-head"><h2>Directives</h2></div>
+
+      <div class="field">
+        <span class="label"><code>openapi_validate</code></span>
+        <div class="seg" role="radiogroup" aria-label="openapi_validate">
+          <label><input type="radio" name="enabled" value="on" checked><span>on</span></label>
+          <label><input type="radio" name="enabled" value="off"><span>off</span></label>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="label"><code>openapi_validate_mode</code></span>
+        <div class="seg" role="radiogroup" aria-label="openapi_validate_mode">
+          <label><input type="radio" name="mode" value="block" checked><span>block</span></label>
+          <label><input type="radio" name="mode" value="audit"><span>audit</span></label>
+        </div>
+      </div>
+
+      <div class="field column">
+        <div class="label-row">
+          <span class="label"><code>openapi_validate_parts</code></span>
+          <button class="link" id="parts-default" type="button">Reset to all</button>
+        </div>
+        <div id="parts" class="checks"></div>
+      </div>
+
+      <div class="field column">
+        <div class="label-row">
+          <span class="label">nginx.conf</span>
+          <button class="link" id="copy-conf" type="button">Copy</button>
+        </div>
+        <pre id="conf" class="code block"></pre>
+      </div>
+    </section>
+
+    <!-- Request + result -->
+    <section class="panel" id="request-panel">
+      <div class="panel-head">
+        <h2>Request</h2>
+        <select id="operation" aria-label="Fill from an operation in the spec">
+          <option value="">Fill from spec…</option>
+        </select>
+      </div>
+
+      <div class="request-line">
+        <select id="method" aria-label="Method">
+          <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option>
+          <option>DELETE</option><option>HEAD</option><option>OPTIONS</option><option>TRACE</option>
+        </select>
+        <input id="uri" class="code" type="text" spellcheck="false" aria-label="Request URI" placeholder="/api/pets?status=available">
+      </div>
+
+      <label class="sub" for="headers">Headers <span class="hint">one <code>Name: value</code> per line</span></label>
+      <textarea id="headers" class="code" rows="3" spellcheck="false"></textarea>
+
+      <label class="sub" for="body">Body</label>
+      <textarea id="body" class="code" rows="6" spellcheck="false"></textarea>
+
+      <div id="result" class="result" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    Differences from a live server: the path is normalized the way nginx builds <code>$uri</code>
+    (decoding, merged slashes, dot segments), but other modules, <code>rewrite</code> rules and
+    nested locations are not simulated.
+  </footer>
+</body>
+</html>

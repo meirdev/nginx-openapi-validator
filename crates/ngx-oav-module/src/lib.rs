@@ -688,13 +688,8 @@ extern "C" fn cmd_set_mode(
 ) -> *mut c_char {
     unsafe {
         let conf = &mut *(conf as *mut ModuleConfig);
-        match directive_arg(cf) {
-            Some(v) if v.eq_ignore_ascii_case("block") => {
-                conf.enforcement = Some(EnforcementMode::Block)
-            }
-            Some(v) if v.eq_ignore_ascii_case("audit") => {
-                conf.enforcement = Some(EnforcementMode::Audit)
-            }
+        match directive_arg(cf).map(str::parse::<EnforcementMode>) {
+            Some(Ok(mode)) => conf.enforcement = Some(mode),
             _ => {
                 ngx_conf_log_error!(
                     NGX_LOG_EMERG,
@@ -721,47 +716,18 @@ extern "C" fn cmd_set_parts(
             return ngx::core::NGX_CONF_ERROR;
         };
 
-        // Comma-separated list. Everything starts off, then the listed parts
-        // are enabled; "all" enables the default set.
-        let mut parts = ValidationParts {
-            path: false,
-            method: false,
-            path_params: false,
-            query_params: false,
-            header_params: false,
-            cookie_params: false,
-            content_type: false,
-            body: false,
-            disallow_additional_query_params: false,
-        };
-
-        for part in val.split(',').map(str::trim).filter(|p| !p.is_empty()) {
-            match part.to_ascii_lowercase().as_str() {
-                "path" => parts.path = true,
-                "method" => parts.method = true,
-                "path_params" => parts.path_params = true,
-                "query_params" => parts.query_params = true,
-                "header_params" => parts.header_params = true,
-                "cookie_params" => parts.cookie_params = true,
-                "content_type" => parts.content_type = true,
-                "body" => parts.body = true,
-                "disallow_additional_query_params" => {
-                    parts.disallow_additional_query_params = true;
-                }
-                "all" => parts = ValidationParts::default(),
-                other => {
-                    ngx_conf_log_error!(
-                        NGX_LOG_EMERG,
-                        cf,
-                        "openapi_validate_parts: unknown part '{}'",
-                        other
-                    );
-                    return ngx::core::NGX_CONF_ERROR;
-                }
+        match ValidationParts::parse(val) {
+            Ok(parts) => conf.parts = Some(parts),
+            Err(other) => {
+                ngx_conf_log_error!(
+                    NGX_LOG_EMERG,
+                    cf,
+                    "openapi_validate_parts: unknown part '{}'",
+                    other
+                );
+                return ngx::core::NGX_CONF_ERROR;
             }
         }
-
-        conf.parts = Some(parts);
     }
     ngx::core::NGX_CONF_OK
 }
