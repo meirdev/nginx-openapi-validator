@@ -173,6 +173,64 @@ impl Default for ValidationParts {
     }
 }
 
+impl ValidationParts {
+    /// Names accepted by [`ValidationParts::parse`], besides `all`.
+    pub const NAMES: [&'static str; 9] = [
+        "path",
+        "method",
+        "path_params",
+        "query_params",
+        "header_params",
+        "cookie_params",
+        "content_type",
+        "body",
+        "disallow_additional_query_params",
+    ];
+
+    /// Every check disabled.
+    pub fn none() -> Self {
+        Self {
+            path: false,
+            method: false,
+            path_params: false,
+            query_params: false,
+            header_params: false,
+            cookie_params: false,
+            content_type: false,
+            body: false,
+            disallow_additional_query_params: false,
+        }
+    }
+
+    /// Parse a comma-separated list of part names, as given to the
+    /// `openapi_validate_parts` directive. Everything starts off, then the
+    /// listed parts are enabled; `all` enables the default set. Names are
+    /// case-insensitive and surrounding whitespace is ignored.
+    ///
+    /// On failure, returns the first unknown name.
+    pub fn parse(list: &str) -> Result<Self, String> {
+        let mut parts = Self::none();
+        for part in list.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+            match part.to_ascii_lowercase().as_str() {
+                "path" => parts.path = true,
+                "method" => parts.method = true,
+                "path_params" => parts.path_params = true,
+                "query_params" => parts.query_params = true,
+                "header_params" => parts.header_params = true,
+                "cookie_params" => parts.cookie_params = true,
+                "content_type" => parts.content_type = true,
+                "body" => parts.body = true,
+                "disallow_additional_query_params" => {
+                    parts.disallow_additional_query_params = true;
+                }
+                "all" => parts = Self::default(),
+                _ => return Err(part.to_string()),
+            }
+        }
+        Ok(parts)
+    }
+}
+
 /// Enforcement mode for validation failures.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum EnforcementMode {
@@ -181,6 +239,22 @@ pub enum EnforcementMode {
     Block,
     /// Log the error but pass the request through.
     Audit,
+}
+
+impl std::str::FromStr for EnforcementMode {
+    type Err = ();
+
+    /// Parse `block` or `audit` (case-insensitive), as given to the
+    /// `openapi_validate_mode` directive.
+    fn from_str(s: &str) -> Result<Self, ()> {
+        if s.eq_ignore_ascii_case("block") {
+            Ok(Self::Block)
+        } else if s.eq_ignore_ascii_case("audit") {
+            Ok(Self::Audit)
+        } else {
+            Err(())
+        }
+    }
 }
 
 /// Full validation configuration for a location.
@@ -648,6 +722,32 @@ fn compile_request_body(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parts_parse_enables_only_listed_parts() {
+        let p = ValidationParts::parse(" Path, query_params ,,").unwrap();
+        assert!(p.path && p.query_params);
+        assert!(!p.method && !p.body && !p.cookie_params);
+    }
+
+    #[test]
+    fn parts_parse_all_then_extras() {
+        let p = ValidationParts::parse("all,cookie_params").unwrap();
+        assert!(p.path && p.body && p.cookie_params);
+        assert!(!p.disallow_additional_query_params);
+    }
+
+    #[test]
+    fn parts_parse_reports_unknown_name() {
+        assert_eq!(ValidationParts::parse("path,bogus").unwrap_err(), "bogus");
+    }
+
+    #[test]
+    fn enforcement_mode_from_str() {
+        assert_eq!("AUDIT".parse(), Ok(EnforcementMode::Audit));
+        assert_eq!("block".parse(), Ok(EnforcementMode::Block));
+        assert_eq!("warn".parse::<EnforcementMode>(), Err(()));
+    }
 
     /// Build a spec whose paths all expose a GET with no parameters.
     fn build_spec(templates: &[&str]) -> CompiledSpec {

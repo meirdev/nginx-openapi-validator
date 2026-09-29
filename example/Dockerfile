@@ -17,7 +17,7 @@ RUN cargo build --release -p ngx-oav-module
 # ── Stage 2: Runtime ─────────────────────────────────────────────────
 # The vendored nginx-src 1.28.4+1.28.2 builds nginx 1.28.2
 # Use the matching official image
-FROM nginx:1.28
+FROM nginx:1.28.2
 
 COPY --from=builder /build/target/release/libngx_oav_module.so /etc/nginx/modules/
 COPY example/nginx.conf /etc/nginx/nginx.conf

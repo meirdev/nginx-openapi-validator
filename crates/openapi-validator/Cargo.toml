@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-jsonschema = "0.56"
+jsonschema = { version = "0.58", default-features = false, features = ["idna"] }
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
 form_urlencoded = "1"
